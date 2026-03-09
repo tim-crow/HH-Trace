@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Leaf, Shield, User } from "lucide-react"
-import { useAuth, getAdminPin } from "@/lib/auth"
+import { useAuth, getAdminPin, getOperatorPin } from "@/lib/auth"
 import type { UserRole } from "@/lib/auth"
 
 export function LoginScreen() {
@@ -25,6 +25,12 @@ export function LoginScreen() {
       const adminPin = await getAdminPin()
       if (pin !== adminPin) {
         setError("Incorrect admin PIN")
+        return
+      }
+    } else if (selectedRole === "operator") {
+      const operatorPin = await getOperatorPin()
+      if (pin !== operatorPin) {
+        setError("Incorrect operator PIN")
         return
       }
     }
@@ -94,19 +100,17 @@ export function LoginScreen() {
                   autoFocus
                 />
               </div>
-              {selectedRole === "admin" && (
-                <div className="space-y-2">
-                  <Label>Admin PIN</Label>
-                  <Input
-                    type="password"
-                    placeholder="Enter PIN"
-                    value={pin}
-                    onChange={(e) => { setPin(e.target.value); setError("") }}
-                    onKeyDown={handleKeyDown}
-                    maxLength={8}
-                  />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>{selectedRole === "admin" ? "Admin PIN" : "Staff PIN"}</Label>
+                <Input
+                  type="password"
+                  placeholder="Enter PIN"
+                  value={pin}
+                  onChange={(e) => { setPin(e.target.value); setError("") }}
+                  onKeyDown={handleKeyDown}
+                  maxLength={8}
+                />
+              </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => { setSelectedRole(null); setError(""); setPin("") }} className="flex-1">

@@ -77,3 +77,20 @@ export async function setAdminPin(pin: string) {
     .from("settings")
     .upsert({ key: "admin_pin", value: pin })
 }
+
+export async function getOperatorPin(): Promise<string> {
+  const { data, error } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", "staff_pin")
+    .single()
+
+  if (error || !data) return DEFAULT_PIN
+  return data.value || DEFAULT_PIN
+}
+
+export async function setOperatorPin(pin: string) {
+  await supabase
+    .from("settings")
+    .upsert({ key: "staff_pin", value: pin })
+}
