@@ -86,20 +86,20 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
   }
 
   const handleDehullingSubmit = () => {
-    if (!dehullDate || !dehullBatch || !dehullStaffCount || !dehullStaffNames) {
+    if (!dehullDate || !dehullBatch) {
       onError("Please fill in all required fields!")
       return
     }
     if (!validateFactoryStock()) return
-    onSubmit({ date: dehullDate, batchId: dehullBatch, staffCount: dehullStaffCount, staffNames: dehullStaffNames }, "dehulling", bulkProducts, finishedProducts)
+    onSubmit({ date: dehullDate, batchId: dehullBatch, staffCount: "", staffNames: "" }, "dehulling", bulkProducts, finishedProducts)
   }
   const handlePressingSubmit = () => {
-    if (!pressDate || !pressBatch || !pressStaffCount || !pressStaffNames) {
+    if (!pressDate || !pressBatch) {
       onError("Please fill in all required fields!")
       return
     }
     if (!validateFactoryStock()) return
-    onSubmit({ date: pressDate, batchId: pressBatch, staffCount: pressStaffCount, staffNames: pressStaffNames }, "pressing", bulkProducts, finishedProducts)
+    onSubmit({ date: pressDate, batchId: pressBatch, staffCount: "", staffNames: "" }, "pressing", bulkProducts, finishedProducts)
   }
 
   return (
@@ -127,18 +127,12 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 <div className="space-y-2"><Label>Date *</Label><Input type="date" required value={dehullDate} onChange={(e) => setDehullDate(e.target.value)} /></div>
                 <div className="space-y-2"><Label>HH Batch ID *</Label><Input placeholder="Enter batch ID" required value={dehullBatch} onChange={(e) => setDehullBatch(e.target.value)} /></div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Number of Staff *</Label><Input type="number" min={0} required value={dehullStaffCount} onChange={(e) => setDehullStaffCount(e.target.value)} /></div>
-                <div className="space-y-2"><Label>Names of Staff *</Label><Input placeholder="Enter staff names" required value={dehullStaffNames} onChange={(e) => setDehullStaffNames(e.target.value)} /></div>
-              </div>
-
               <BulkProductSection products={bulkProducts} onUpdate={updateBulkProduct} onAdd={addBulkProductRow} onRemove={removeBulkProductRow} getAvailableBatches={getAvailableBatches} productOptions={[{ key: "whole-seeds", label: "Whole Seeds" }]} />
 
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold">Finished Products (KG)</h4>
                 {finishedProducts.map((product, index) => (
-                  <div key={index} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
-                    <div className="space-y-1"><Label className="text-xs">Bin #</Label><Input value={product.bin} onChange={(e) => updateFinishedProduct(index, "bin", e.target.value)} /></div>
+                  <div key={index} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
                     <div className="space-y-1"><Label className="text-xs">Hearts</Label><Input type="number" step="0.01" value={product.hearts} onChange={(e) => updateFinishedProduct(index, "hearts", e.target.value)} /></div>
                     <div className="space-y-1"><Label className="text-xs">Hulls</Label><Input type="number" step="0.01" value={product.hulls} onChange={(e) => updateFinishedProduct(index, "hulls", e.target.value)} /></div>
                     <div className="space-y-1"><Label className="text-xs">Lights</Label><Input type="number" step="0.01" value={product.lights} onChange={(e) => updateFinishedProduct(index, "lights", e.target.value)} /></div>
@@ -176,16 +170,11 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 <Label>Oil Press Type *</Label>
                 <Select><SelectTrigger><SelectValue placeholder="Select press type" /></SelectTrigger><SelectContent><SelectItem value="large">LARGE (FLORAPOWER)</SelectItem><SelectItem value="small">SMALL (ZIGGY)</SelectItem></SelectContent></Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Number of Staff *</Label><Input type="number" min={0} required value={pressStaffCount} onChange={(e) => setPressStaffCount(e.target.value)} /></div>
-                <div className="space-y-2"><Label>Names of Staff *</Label><Input placeholder="Enter staff names" required value={pressStaffNames} onChange={(e) => setPressStaffNames(e.target.value)} /></div>
-              </div>
               <BulkProductSection products={bulkProducts} onUpdate={updateBulkProduct} onAdd={addBulkProductRow} onRemove={removeBulkProductRow} getAvailableBatches={getAvailableBatches} productOptions={[{ key: "hemp-hearts", label: "Hemp Hearts" }, { key: "lights", label: "Lights" }, { key: "overs", label: "Overs" }, { key: "whole-seeds", label: "Whole Seeds" }]} />
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold">Finished Products (KG)</h4>
                 {finishedProducts.map((product, index) => (
-                  <div key={index} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
-                    <div className="space-y-1"><Label className="text-xs">Bin #</Label><Input value={product.bin} onChange={(e) => updateFinishedProduct(index, "bin", e.target.value)} /></div>
+                  <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
                     <div className="space-y-1"><Label className="text-xs">Oil (Raw) KG</Label><Input type="number" step="0.01" value={product.oil} onChange={(e) => updateFinishedProduct(index, "oil", e.target.value)} /></div>
                     <div className="space-y-1">
                       <Label className="text-xs">Cake Type</Label>

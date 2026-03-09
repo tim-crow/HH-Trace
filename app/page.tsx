@@ -39,6 +39,7 @@ import { InventoryTable } from "@/components/inventory-table"
 import { RecordsTable } from "@/components/records-table"
 import { OrderManagement } from "@/components/order-management"
 import { AuditLogView } from "@/components/audit-log-view"
+import { ProcessingAnalytics } from "@/components/processing-analytics"
 import { AssistantChat } from "@/components/assistant-chat"
 import { generateId } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
@@ -222,6 +223,15 @@ function AppContent() {
       }
       setRecords((prev) => [...prev, newRecord])
       supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, processor: newRecord.processor, status: newRecord.status }).then()
+      const outputs = newInventoryItems.map(item => ({ productType: item.productType, kg: item.quantity }))
+      supabase.from('processing_runs').insert({
+        id: generateId("PR"),
+        date: formData.date,
+        batch_id: formData.batchId,
+        process_type: processType,
+        total_input_kg: totalKg,
+        outputs: outputs,
+      }).then()
       logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${totalKg} kg input, ${newInventoryItems.length} outputs created`)
       showMessage(`${processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
     }
@@ -363,6 +373,8 @@ function AppContent() {
         )
       case "records":
         return <RecordsTable records={records} />
+      case "analytics":
+        return <ProcessingAnalytics />
       case "audit":
         return isAdmin ? <AuditLogView /> : null
       default:
