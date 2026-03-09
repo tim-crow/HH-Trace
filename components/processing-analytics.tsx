@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, BarChart3, Package, Scale } from "lucide-react"
+import { BarChart3, Package } from "lucide-react"
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts"
@@ -34,7 +34,7 @@ const PRODUCT_COLORS: Record<string, string> = {
 
 export function ProcessingAnalytics() {
   const [runs, setRuns] = React.useState<ProcessingRun[]>([])
-  const [tab, setTab] = React.useState("all")
+  const [tab, setTab] = React.useState("dehulling")
 
   React.useEffect(() => {
     supabase
@@ -55,20 +55,11 @@ export function ProcessingAnalytics() {
       })
   }, [])
 
-  const filtered = tab === "all" ? runs : runs.filter((r) => r.processType === tab)
+  const filtered = runs.filter((r) => r.processType === tab)
 
   // Summary stats
   const totalRuns = filtered.length
   const totalProcessed = filtered.reduce((sum, r) => sum + r.totalInputKg, 0)
-  const totalOutput = filtered.reduce((sum, r) => sum + r.outputs.reduce((s, o) => s + o.kg, 0), 0)
-  const avgYield = totalProcessed > 0 ? (totalOutput / totalProcessed) * 100 : 0
-
-  const bestRun = filtered.reduce<{ batchId: string; yield: number } | null>((best, r) => {
-    const outputKg = r.outputs.reduce((s, o) => s + o.kg, 0)
-    const y = r.totalInputKg > 0 ? (outputKg / r.totalInputKg) * 100 : 0
-    if (!best || y > best.yield) return { batchId: r.batchId, yield: y }
-    return best
-  }, null)
 
   // Per-product yield averages
   const productYields = React.useMemo(() => {
@@ -141,17 +132,14 @@ export function ProcessingAnalytics() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="all">All Processing</TabsTrigger>
           <TabsTrigger value="dehulling">Dehulling</TabsTrigger>
           <TabsTrigger value="pressing">Pressing</TabsTrigger>
         </TabsList>
 
         <div className="mt-4 space-y-6">
           {/* Summary Cards */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total Runs" value={totalRuns.toString()} icon={BarChart3} description={`${tab === "all" ? "all types" : tab}`} />
-            <StatCard label="Avg Yield" value={`${avgYield.toFixed(1)}%`} icon={TrendingUp} description="output / input" alert={avgYield < 60} />
-            <StatCard label="Best Yield" value={bestRun ? `${bestRun.yield.toFixed(1)}%` : "—"} icon={Scale} description={bestRun?.batchId || "no data"} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <StatCard label="Total Runs" value={totalRuns.toString()} icon={BarChart3} description={tab} />
             <StatCard label="Total Processed" value={`${totalProcessed.toLocaleString()} kg`} icon={Package} description="total input volume" />
           </div>
 
@@ -226,50 +214,47 @@ export function ProcessingAnalytics() {
               <CardTitle>Processing Runs</CardTitle>
               <CardDescription>{filtered.length} run{filtered.length !== 1 ? "s" : ""} recorded</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Batch ID</TableHead>
-                    <TableHead>Type</TableHead>
                     <TableHead className="text-right">Input (kg)</TableHead>
-                    <TableHead>Outputs</TableHead>
-                    <TableHead className="text-right">Output (kg)</TableHead>
-                    <TableHead className="text-right">Yield %</TableHead>
+                    {allProductTypes.map((type) => (
+                      <TableHead key={type} className="text-right">
+                        <div className="text-xs">{type}</div>
+                        <div className="text-[10px] text-muted-foreground font-normal">kg / yield%</div>
+                      </TableHead>
+                    ))}
                     <TableHead className="text-right">Waste %</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {[...filtered].reverse().map((run) => {
                     const totalOut = run.outputs.reduce((s, o) => s + o.kg, 0)
-                    const yieldPct = run.totalInputKg > 0 ? (totalOut / run.totalInputKg) * 100 : 0
-                    const wastePct = 100 - yieldPct
+                    const wastePct = run.totalInputKg > 0 ? ((run.totalInputKg - totalOut) / run.totalInputKg) * 100 : 0
                     return (
                       <TableRow key={run.id}>
                         <TableCell className="whitespace-nowrap text-sm">{run.date}</TableCell>
                         <TableCell className="font-mono text-sm font-medium">{run.batchId}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="capitalize">{run.processType}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right text-sm">{run.totalInputKg.toFixed(1)}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {run.outputs.map((o, i) => (
-                              <span key={i} className="text-xs text-muted-foreground">
-                                {o.productType} ({o.kg.toFixed(1)}kg)
-                                {i < run.outputs.length - 1 && ","}
-                              </span>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right text-sm">{totalOut.toFixed(1)}</TableCell>
+                        <TableCell className="text-right text-sm font-medium">{run.totalInputKg.toFixed(1)}</TableCell>
+                        {allProductTypes.map((type) => {
+                          const output = run.outputs.find((o) => o.productType === type)
+                          if (!output) return <TableCell key={type} className="text-right text-sm text-muted-foreground">—</TableCell>
+                          const yieldPct = run.totalInputKg > 0 ? (output.kg / run.totalInputKg) * 100 : 0
+                          return (
+                            <TableCell key={type} className="text-right text-sm">
+                              <span className="font-medium">{output.kg.toFixed(1)}</span>
+                              <span className="text-muted-foreground ml-1 text-xs">({yieldPct.toFixed(1)}%)</span>
+                            </TableCell>
+                          )
+                        })}
                         <TableCell className="text-right">
-                          <Badge variant={yieldPct > 80 ? "success" : yieldPct > 60 ? "warning" : "destructive"}>
-                            {yieldPct.toFixed(1)}%
+                          <Badge variant={wastePct < 20 ? "success" : wastePct < 30 ? "warning" : "destructive"}>
+                            {wastePct.toFixed(1)}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">{wastePct.toFixed(1)}%</TableCell>
                       </TableRow>
                     )
                   })}
