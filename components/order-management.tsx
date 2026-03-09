@@ -21,7 +21,6 @@ import {
 import { Plus, Eye, Edit, Search } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { cn, generateId } from "@/lib/utils"
-import { getCustomers } from "@/lib/remembered-entries"
 import type { Order, OrderStatus } from "@/lib/types"
 
 const ORDER_STATUSES: OrderStatus[] = ["New", "In Progress", "Packed", "Dispatched", "Completed"]
@@ -53,10 +52,10 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
   const [editOrder, setEditOrder] = React.useState<Order | null>(null)
   const [showNewForm, setShowNewForm] = React.useState(false)
 
-  const [customerNames, setCustomerNames] = React.useState<string[]>([])
-  React.useEffect(() => {
-    setCustomerNames(getCustomers().map((c) => c.name))
-  }, [])
+  const customerNames = React.useMemo(() => {
+    const names = new Set(orders.filter((o) => !o.deleted).map((o) => o.customer))
+    return [...names]
+  }, [orders])
 
   const activeOrders = orders.filter((o) => !o.deleted)
   const filtered = activeOrders.filter((order) => {
