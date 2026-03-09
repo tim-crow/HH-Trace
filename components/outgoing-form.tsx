@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2 } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
-import { HEMP_PRODUCTS } from "@/lib/constants"
+import { HEMP_PRODUCTS, FINISHED_GOODS } from "@/lib/constants"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
 
 interface ProductLine {
@@ -101,7 +101,7 @@ export function OutgoingForm({ onSubmit }: OutgoingFormProps) {
                   <Select value={product.productType} onValueChange={(v) => updateProduct(index, "productType", v)}>
                     <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
                     <SelectContent>
-                      {HEMP_PRODUCTS.filter((p) => p !== "Finished Goods").map((p) => (
+                      {[...HEMP_PRODUCTS, ...FINISHED_GOODS].map((p) => (
                         <SelectItem key={p} value={p}>{p}</SelectItem>
                       ))}
                     </SelectContent>

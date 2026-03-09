@@ -1,30 +1,44 @@
-# Shadcn product dashboard
+# Hemp Harvests — Traceability System
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Internal traceability and inventory management system for Hemp Harvests.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/tims-projects-ce4fb8f6/v0-shadcn-product-dashboard)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/projects/XhxNgkKiRD4)
+## Features
 
-## Overview
+- **Receival** — log incoming raw materials with batch codes
+- **Processing** — record dehulling, pressing, and additional processing (milling, blending, filtering, packing)
+- **Outgoing** — track dispatched goods with customer and freight details
+- **Live Inventory** — real-time view of all stock by product type, batch, and location
+- **Order Management** — customer orders with status workflow and overdue tracking
+- **Audit Log** — full history of who did what, when (admin only)
+- **Role-based Access** — Admin (full access) and Operator (data entry) with PIN protection
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+## Product Types
 
-## Deployment
+| Category | Products |
+|----------|----------|
+| Raw | Whole Seeds |
+| Dehulling | Hemp Hearts, Hemp Hulls, Hemp Lights, Overs |
+| Pressing | Hemp Oil (Raw), Hemp Meal Cake, Hemp Protein Cake |
+| Additional Processing | Hemp Oil (Filtered), Hemp Protein Powder (50), Hemp Protein Powder (65) |
+| Finished Goods | Hemp Seeds (420g, 250g, 15kg), Oil 250ml, Protein Powder 65 (250g, 420g, 4.2kg, 15kg), Protein Powder 50 15kg |
+| Other | Packaging |
 
-Your project is live at:
+## Tech Stack
 
-**[https://vercel.com/tims-projects-ce4fb8f6/v0-shadcn-product-dashboard](https://vercel.com/tims-projects-ce4fb8f6/v0-shadcn-product-dashboard)**
+- **Next.js** (React)
+- **Tailwind CSS** + **shadcn/ui** components
+- **Supabase** (PostgreSQL database)
+- **Vercel** (hosting)
 
-## Build your app
+## Setup
 
-Continue building your app on:
+```bash
+pnpm install
+pnpm dev
+```
 
-**[https://v0.app/chat/projects/XhxNgkKiRD4](https://v0.app/chat/projects/XhxNgkKiRD4)**
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+Requires `.env.local` with:
+```
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
