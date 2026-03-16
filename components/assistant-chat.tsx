@@ -24,6 +24,8 @@ const SUGGESTIONS = [
   "Which batches are running low?",
   "Show me today's activity",
   "What product types do I have?",
+  "How much did we ship in the last 90 days?",
+  "Show outgoing summary this month",
 ]
 
 export function AssistantChat({ inventory, records }: AssistantChatProps) {
@@ -166,9 +168,86 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         return `📜 **Transaction Records** (${records.length} total)\n\n${list}\n\nMost recent: **${records[records.length - 1]?.type}** — ${records[records.length - 1]?.batchCode} on ${records[records.length - 1]?.date}`
       }
 
+      // Sales / outgoing summary
+      if (q.includes("sell") || q.includes("sold") || q.includes("sales") || q.includes("outgoing") || q.includes("ship") || q.includes("shipped")) {
+        const outgoing = records.filter((r) => r.type === "Outgoing")
+
+        // Parse time filter
+        let filteredOutgoing = outgoing
+        let timeLabel = "all time"
+        const now = new Date()
+
+        if (q.includes("last 90 days") || q.includes("past 90 days")) {
+          const cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+          filteredOutgoing = outgoing.filter((r) => new Date(r.date) >= cutoff)
+          timeLabel = "last 90 days"
+        } else if (q.includes("last 30 days") || q.includes("past 30 days")) {
+          const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+          filteredOutgoing = outgoing.filter((r) => new Date(r.date) >= cutoff)
+          timeLabel = "last 30 days"
+        } else if (q.includes("last week") || q.includes("past week")) {
+          const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+          filteredOutgoing = outgoing.filter((r) => new Date(r.date) >= cutoff)
+          timeLabel = "last 7 days"
+        } else if (q.includes("this month")) {
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+          filteredOutgoing = outgoing.filter((r) => new Date(r.date) >= monthStart)
+          timeLabel = "this month"
+        } else if (q.includes("this year")) {
+          const yearStart = new Date(now.getFullYear(), 0, 1)
+          filteredOutgoing = outgoing.filter((r) => new Date(r.date) >= yearStart)
+          timeLabel = "this year"
+        }
+
+        // Check for specific product in query
+        const productKeywordsOutgoing = ["whole seeds", "hemp hearts", "hemp oil (raw)", "hemp oil (filtered)", "hemp protein cake", "hemp meal cake", "hemp protein powder", "hemp hulls", "hemp lights", "overs", "hemp oil", "hemp protein"]
+        const matchedOutgoingProduct = productKeywordsOutgoing.find((p) => q.includes(p))
+
+        if (matchedOutgoingProduct) {
+          const productRecords = filteredOutgoing.filter((r) => r.productType.toLowerCase().includes(matchedOutgoingProduct))
+          const totalKg = productRecords.reduce((sum, r) => sum + r.quantity, 0)
+          const displayName = matchedOutgoingProduct.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+          if (productRecords.length === 0) {
+            return `No outgoing records for **${displayName}** (${timeLabel}).`
+          }
+          const dates = productRecords.map((r) => r.date).sort()
+          return `📤 **${displayName} — Outgoing** (${timeLabel})\n\nTotal shipped: **${totalKg.toLocaleString()} kg** across **${productRecords.length}** shipment${productRecords.length > 1 ? "s" : ""}\nDate range: ${dates[0]} → ${dates[dates.length - 1]}`
+        }
+
+        if (filteredOutgoing.length === 0) {
+          return `📤 No outgoing shipments found (${timeLabel}).`
+        }
+
+        const totalKg = filteredOutgoing.reduce((sum, r) => sum + r.quantity, 0)
+        const byProduct: Record<string, number> = {}
+        filteredOutgoing.forEach((r) => {
+          byProduct[r.productType] = (byProduct[r.productType] || 0) + r.quantity
+        })
+        const breakdown = Object.entries(byProduct)
+          .sort((a, b) => b[1] - a[1])
+          .map(([type, qty]) => `• **${type}**: ${qty.toLocaleString()} kg`)
+          .join("\n")
+        return `📤 **Outgoing Summary** (${timeLabel})\n\nTotal shipped: **${totalKg.toLocaleString()} kg** across **${filteredOutgoing.length}** shipment${filteredOutgoing.length > 1 ? "s" : ""}\n\n${breakdown}`
+      }
+
+      // Top customers
+      if (q.includes("top customer") || q.includes("biggest customer") || q.includes("who do we sell to") || q.includes("customers")) {
+        const outgoing = records.filter((r) => r.type === "Outgoing")
+        const totalKg = outgoing.reduce((sum, r) => sum + r.quantity, 0)
+        const byProduct: Record<string, number> = {}
+        outgoing.forEach((r) => {
+          byProduct[r.productType] = (byProduct[r.productType] || 0) + r.quantity
+        })
+        const breakdown = Object.entries(byProduct)
+          .sort((a, b) => b[1] - a[1])
+          .map(([type, qty]) => `• **${type}**: ${qty.toLocaleString()} kg`)
+          .join("\n")
+        return `👥 **Customer Insights**\n\nCustomer-level tracking is coming soon! In the meantime, here's the outgoing volume breakdown:\n\nTotal shipped: **${totalKg.toLocaleString()} kg** across **${outgoing.length}** shipment${outgoing.length > 1 ? "s" : ""}\n\n${breakdown}`
+      }
+
       // Help
       if (q.includes("help") || q.includes("what can you")) {
-        return `🤖 I can help you with:\n\n• **Inventory summary** — overview of all stock\n• **Low stock alerts** — batches below 50 kg\n• **Today's activity** — recent records and updates\n• **Product lookups** — ask about specific products (e.g., "hemp oil")\n• **Batch lookups** — find details for a specific batch code\n• **Location breakdown** — where stock is stored\n• **Transaction history** — record summaries\n\nJust ask in plain language!`
+        return `🤖 I can help you with:\n\n• **Inventory summary** — overview of all stock\n• **Low stock alerts** — batches below 50 kg\n• **Today's activity** — recent records and updates\n• **Product lookups** — ask about specific products (e.g., "hemp oil")\n• **Batch lookups** — find details for a specific batch code\n• **Location breakdown** — where stock is stored\n• **Transaction history** — record summaries\n• **Sales / outgoing** — shipment totals with time filters\n• **Customer insights** — outgoing volume breakdown\n\nJust ask in plain language!`
       }
 
       return `I'm not sure how to answer that yet. Try asking about:\n\n• Inventory summary\n• Low stock / running low\n• Today's activity\n• Specific products (e.g., "hemp oil")\n• Batch details\n• Storage locations\n\nOr type **help** for a full list of what I can do.`

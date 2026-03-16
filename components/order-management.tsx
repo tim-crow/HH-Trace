@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, Eye, Edit, Search } from "lucide-react"
+import { Plus, Eye, Edit, Search, Printer, Download } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { cn, generateId } from "@/lib/utils"
 import type { Order, OrderStatus } from "@/lib/types"
@@ -47,7 +47,7 @@ interface OrderManagementProps {
 
 export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onAuditLog, onMessage }: OrderManagementProps) {
   const [filter, setFilter] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<string>("all")
+  const [statusFilter, setStatusFilter] = React.useState<string>("open")
   const [viewOrder, setViewOrder] = React.useState<Order | null>(null)
   const [editOrder, setEditOrder] = React.useState<Order | null>(null)
   const [showNewForm, setShowNewForm] = React.useState(false)
@@ -63,7 +63,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
       order.orderNumber.toLowerCase().includes(filter.toLowerCase()) ||
       order.customer.toLowerCase().includes(filter.toLowerCase()) ||
       order.details.toLowerCase().includes(filter.toLowerCase())
-    const matchesStatus = statusFilter === "all" || order.status === statusFilter
+    const matchesStatus = statusFilter === "all" || (statusFilter === "open" ? order.status !== "Completed" : order.status === statusFilter)
     return matchesSearch && matchesStatus
   })
 
@@ -100,6 +100,18 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
     onAuditLog("Created Order", data.orderNumber, `${data.customer} — ${data.details}, due ${data.dueDate}`)
     onMessage(`Order ${data.orderNumber} created!`)
     setShowNewForm(false)
+
+    // Send email notification (fire-and-forget)
+    fetch("/api/notify-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderNumber: data.orderNumber,
+        customer: data.customer,
+        details: data.details,
+        dueDate: data.dueDate,
+      }),
+    }).catch(() => {})
   }
 
   const handleEditSave = () => {
@@ -120,6 +132,120 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
     onMessage(`Order ${order.orderNumber} deleted`)
   }
 
+  const handlePrint = (order: Order) => {
+    const isOverdue = order.dueDate < new Date().toISOString().split("T")[0] && !["Dispatched", "Completed"].includes(order.status)
+    const win = window.open("", "_blank")
+    if (!win) return
+    win.document.write(`<!DOCTYPE html><html><head><title>Order ${order.orderNumber}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        @page { size: A4; margin: 20mm; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 40px; color: #1a1a1a; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 3px solid #16a34a; }
+        .logo { font-size: 22px; font-weight: 700; color: #16a34a; }
+        .logo span { color: #555; font-weight: 400; font-size: 14px; display: block; }
+        .status { padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+        .status.overdue { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+        .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 4px; font-weight: 600; }
+        .field p { font-size: 15px; font-weight: 500; }
+        .details-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 28px; min-height: 80px; }
+        .details-box label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 8px; font-weight: 600; }
+        .details-box p { font-size: 14px; line-height: 1.6; }
+        .notes-section { margin-top: 40px; }
+        .notes-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 12px; font-weight: 600; }
+        .notes-lines { border-top: 1px solid #e5e7eb; }
+        .notes-lines .line { border-bottom: 1px solid #e5e7eb; height: 36px; }
+        .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      <div class="header">
+        <div class="logo">Hemp Harvests<span>Order Sheet</span></div>
+        <div class="status${isOverdue ? " overdue" : ""}">${order.status}${isOverdue ? " — OVERDUE" : ""}</div>
+      </div>
+      <div class="grid">
+        <div class="field"><label>Order Number</label><p>${order.orderNumber}</p></div>
+        <div class="field"><label>Customer</label><p>${order.customer}</p></div>
+        <div class="field"><label>Date Received</label><p>${order.dateReceived}</p></div>
+        <div class="field"><label>Due Date</label><p style="${isOverdue ? "color:#dc2626;font-weight:700" : ""}">${order.dueDate}</p></div>
+        <div class="field"><label>Created By</label><p>${order.createdBy}</p></div>
+        <div class="field"><label>Last Updated</label><p>${order.lastUpdatedBy} — ${new Date(order.lastUpdated).toLocaleDateString()}</p></div>
+      </div>
+      <div class="details-box"><label>Order Details</label><p>${order.details || "—"}</p></div>
+      <div class="notes-section">
+        <h3>Packing Notes / Traceability</h3>
+        <div class="notes-lines">${Array(8).fill('<div class="line"></div>').join("")}</div>
+      </div>
+      <div class="footer"><span>Printed ${new Date().toLocaleString()}</span><span>Hemp Harvests Traceability System</span></div>
+      </body></html>`)
+    win.document.close()
+    win.print()
+  }
+
+  const handleExportPdf = (mode: "open" | "all") => {
+    const today = new Date().toISOString().split("T")[0]
+    const exportOrders = mode === "open"
+      ? activeOrders.filter((o) => o.status !== "Completed")
+      : activeOrders
+    const sortedExport = [...exportOrders].sort((a, b) => {
+      const statusOrder = { "New": 0, "In Progress": 1, "Packed": 2, "Dispatched": 3, "Completed": 4 }
+      return statusOrder[a.status] - statusOrder[b.status] || a.dueDate.localeCompare(b.dueDate)
+    })
+    if (sortedExport.length === 0) { onMessage("No orders to export"); return }
+    const win = window.open("", "_blank")
+    if (!win) return
+    const orderPages = sortedExport.map((order) => {
+      const isOverdue = order.dueDate < today && !["Dispatched", "Completed"].includes(order.status)
+      return `<div class="page">
+        <div class="header">
+          <div class="logo">Hemp Harvests<span>Order Sheet</span></div>
+          <div class="status${isOverdue ? " overdue" : ""}">${order.status}${isOverdue ? " — OVERDUE" : ""}</div>
+        </div>
+        <div class="grid">
+          <div class="field"><label>Order Number</label><p>${order.orderNumber}</p></div>
+          <div class="field"><label>Customer</label><p>${order.customer}</p></div>
+          <div class="field"><label>Date Received</label><p>${order.dateReceived}</p></div>
+          <div class="field"><label>Due Date</label><p style="${isOverdue ? "color:#dc2626;font-weight:700" : ""}">${order.dueDate}</p></div>
+          <div class="field"><label>Created By</label><p>${order.createdBy}</p></div>
+          <div class="field"><label>Last Updated</label><p>${order.lastUpdatedBy} — ${new Date(order.lastUpdated).toLocaleDateString()}</p></div>
+        </div>
+        <div class="details-box"><label>Order Details</label><p>${order.details || "—"}</p></div>
+        <div class="notes-section">
+          <h3>Packing Notes / Traceability</h3>
+          <div class="notes-lines">${Array(8).fill('<div class="line"></div>').join("")}</div>
+        </div>
+        <div class="footer"><span>Printed ${new Date().toLocaleString()}</span><span>Hemp Harvests Traceability System</span></div>
+      </div>`
+    }).join("")
+    win.document.write(`<!DOCTYPE html><html><head><title>${mode === "open" ? "Open" : "All"} Orders — Hemp Harvests</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        @page { size: A4; margin: 20mm; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; }
+        .page { padding: 40px; page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 3px solid #16a34a; }
+        .logo { font-size: 22px; font-weight: 700; color: #16a34a; }
+        .logo span { color: #555; font-weight: 400; font-size: 14px; display: block; }
+        .status { padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+        .status.overdue { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+        .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 4px; font-weight: 600; }
+        .field p { font-size: 15px; font-weight: 500; }
+        .details-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 28px; min-height: 80px; }
+        .details-box label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 8px; font-weight: 600; }
+        .details-box p { font-size: 14px; line-height: 1.6; }
+        .notes-section { margin-top: 40px; }
+        .notes-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 12px; font-weight: 600; }
+        .notes-lines { border-top: 1px solid #e5e7eb; }
+        .notes-lines .line { border-bottom: 1px solid #e5e7eb; height: 36px; }
+        .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
+        @media print { .page { padding: 0; } }
+      </style></head><body>${orderPages}</body></html>`)
+    win.document.close()
+    win.print()
+  }
+
   // Determine which statuses an operator can move to
   const getNextStatuses = (current: OrderStatus): OrderStatus[] => {
     if (isAdmin) return ORDER_STATUSES
@@ -138,11 +264,19 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
           <h2 className="text-2xl font-bold tracking-tight">Order Management</h2>
           <p className="text-muted-foreground">{openCount} open order{openCount !== 1 ? "s" : ""}</p>
         </div>
-        {isAdmin && (
-          <Button onClick={() => setShowNewForm(true)}>
-            <Plus className="h-4 w-4 mr-1" />New Order
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => handleExportPdf("open")}>
+            <Download className="h-4 w-4 mr-1" />Open Orders
           </Button>
-        )}
+          <Button variant="outline" size="sm" onClick={() => handleExportPdf("all")}>
+            <Download className="h-4 w-4 mr-1" />All Orders
+          </Button>
+          {isAdmin && (
+            <Button onClick={() => setShowNewForm(true)}>
+              <Plus className="h-4 w-4 mr-1" />New Order
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -153,6 +287,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="open">Open Orders</SelectItem>
             <SelectItem value="all">All Statuses</SelectItem>
             {ORDER_STATUSES.map((s) => (
               <SelectItem key={s} value={s}>{s}</SelectItem>
@@ -211,6 +346,9 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
                       <div className="flex justify-end gap-1">
                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setViewOrder(order)}>
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handlePrint(order)} title="Print order sheet">
+                          <Printer className="h-4 w-4" />
                         </Button>
                         {isAdmin && (
                           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditOrder(order)}>

@@ -26,6 +26,7 @@
     "react": "^19",
     "react-dom": "^19",
     "recharts": "^3.8.0",
+    "resend": "^6.9.3",
     "tailwind-merge": "3.4.0",
     "tailwindcss-animate": "^1.0.7"
   },

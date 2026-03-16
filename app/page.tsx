@@ -345,10 +345,50 @@ function AppContent() {
           />
         )
       case "outgoing":
-        return <OutgoingForm onSubmit={() => {
-          logAction(user.name, user.role, "Created Outgoing", "Dispatch", "Outgoing goods record submitted")
-          showMessage("Outgoing record saved!")
-        }} />
+        return <OutgoingForm
+          inventory={activeInventory}
+          onSubmit={(products, customerName, customerAddress, freight) => {
+            // Deduct each product from inventory
+            products.forEach((p) => {
+              setInventory((prev) =>
+                prev.map((item) =>
+                  item.batchCode === p.batchCode
+                    ? { ...item, quantity: Math.max(0, item.quantity - p.weight), lastUpdated: new Date().toISOString() }
+                    : item
+                )
+              )
+              const current = inventory.find((i) => i.batchCode === p.batchCode)
+              if (current) {
+                supabase.from('inventory').update({
+                  quantity: Math.max(0, current.quantity - p.weight),
+                  last_updated: new Date().toISOString(),
+                }).eq('batch_code', p.batchCode).then()
+              }
+            })
+            // Create transaction records
+            products.forEach((p) => {
+              const newRecord: TransactionRecord = {
+                id: generateId("REC"),
+                type: "Outgoing",
+                date: new Date().toISOString().split("T")[0],
+                productType: p.productType,
+                batchCode: p.batchCode,
+                quantity: p.weight,
+                status: "Completed",
+              }
+              setRecords((prev) => [...prev, newRecord])
+              supabase.from('records').insert({
+                id: newRecord.id, type: newRecord.type, date: newRecord.date,
+                product_type: newRecord.productType, batch_code: newRecord.batchCode,
+                quantity: newRecord.quantity, status: newRecord.status,
+              }).then()
+            })
+            const totalKg = products.reduce((s, p) => s + p.weight, 0)
+            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `${totalKg} kg to ${customerName} via ${freight || "N/A"}: ${products.map(p => `${p.productType} ${p.batchCode} ${p.weight}kg`).join(", ")}`)
+            showMessage("Outgoing record saved! Inventory updated.")
+          }}
+          onError={showMessage}
+        />
       case "orders":
         return (
           <OrderManagement

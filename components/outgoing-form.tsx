@@ -12,6 +12,7 @@ import { Plus, Trash2 } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { HEMP_PRODUCTS, FINISHED_GOODS } from "@/lib/constants"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
+import type { InventoryItem } from "@/lib/types"
 
 interface ProductLine {
   productType: string
@@ -20,10 +21,12 @@ interface ProductLine {
 }
 
 interface OutgoingFormProps {
-  onSubmit: () => void
+  inventory: InventoryItem[]
+  onSubmit: (products: {productType: string; batchCode: string; weight: number}[], customerName: string, customerAddress: string, freight: string) => void
+  onError: (msg: string) => void
 }
 
-export function OutgoingForm({ onSubmit }: OutgoingFormProps) {
+export function OutgoingForm({ inventory, onSubmit, onError }: OutgoingFormProps) {
   const [products, setProducts] = React.useState<ProductLine[]>([
     { productType: "", batchCode: "", weight: "" },
   ])
@@ -47,7 +50,64 @@ export function OutgoingForm({ onSubmit }: OutgoingFormProps) {
     }
   }
 
+  const getAvailableStock = React.useCallback(
+    (batchCode: string) => {
+      return inventory
+        .filter((item) => item.batchCode === batchCode && !item.deleted)
+        .reduce((sum, item) => sum + item.quantity, 0)
+    },
+    [inventory]
+  )
+
+  const getBatchCodesForProduct = React.useCallback(
+    (productType: string) => {
+      const items = inventory.filter(
+        (item) => item.productType === productType && !item.deleted && item.quantity > 0
+      )
+      const map = new Map<string, number>()
+      for (const item of items) {
+        map.set(item.batchCode, (map.get(item.batchCode) || 0) + item.quantity)
+      }
+      return Array.from(map.entries()).map(([code, qty]) => ({
+        label: `${code} (${qty} kg available)`,
+        value: code,
+        qty,
+      }))
+    },
+    [inventory]
+  )
+
+  const stockErrors = React.useMemo(() => {
+    return products.map((p) => {
+      if (!p.batchCode || !p.weight) return null
+      const requested = parseFloat(p.weight)
+      if (isNaN(requested) || requested <= 0) return null
+      const available = getAvailableStock(p.batchCode)
+      if (requested > available) {
+        return `Exceeds available stock (${available} kg available)`
+      }
+      return null
+    })
+  }, [products, getAvailableStock])
+
   const handleSubmit = () => {
+    const errors = products
+      .map((p, i) => {
+        if (!p.batchCode || !p.weight) return null
+        const requested = parseFloat(p.weight)
+        const available = getAvailableStock(p.batchCode)
+        if (requested > available) {
+          return `Line ${i + 1}: Batch ${p.batchCode} requires ${requested} kg but only ${available} kg available`
+        }
+        return null
+      })
+      .filter(Boolean)
+
+    if (errors.length > 0) {
+      onError(errors.join("; "))
+      return
+    }
+
     if (customerName.trim()) {
       saveCustomer(customerName, customerAddress)
       setSavedCustomers(getCustomers())
@@ -56,7 +116,16 @@ export function OutgoingForm({ onSubmit }: OutgoingFormProps) {
       saveFreightCompany(freight)
       setSavedFreight(getFreightCompanies())
     }
-    onSubmit()
+    onSubmit(
+      products.map((p) => ({
+        productType: p.productType,
+        batchCode: p.batchCode,
+        weight: parseFloat(p.weight) || 0,
+      })),
+      customerName,
+      customerAddress,
+      freight
+    )
   }
 
   const addProduct = () => {
@@ -94,40 +163,62 @@ export function OutgoingForm({ onSubmit }: OutgoingFormProps) {
           </div>
           <div className="space-y-4">
             <h4 className="text-sm font-semibold">Product Details</h4>
-            {products.map((product, index) => (
-              <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
-                <div className="space-y-1">
-                  <Label className="text-xs">Product Type</Label>
-                  <Select value={product.productType} onValueChange={(v) => updateProduct(index, "productType", v)}>
-                    <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
-                    <SelectContent>
-                      {[...HEMP_PRODUCTS, ...FINISHED_GOODS].map((p) => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {products.map((product, index) => {
+              const batchOptions = getBatchCodesForProduct(product.productType)
+              const batchSuggestions = batchOptions.map((b) => b.label)
+              return (
+                <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Product Type</Label>
+                    <Select
+                      value={product.productType}
+                      onValueChange={(v) => {
+                        updateProduct(index, "productType", v)
+                        updateProduct(index, "batchCode", "")
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                      <SelectContent>
+                        {[...HEMP_PRODUCTS, ...FINISHED_GOODS].map((p) => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Batch Code</Label>
+                    <AutocompleteInput
+                      placeholder="Enter batch code"
+                      value={product.batchCode}
+                      onChange={(v) => updateProduct(index, "batchCode", v)}
+                      suggestions={batchSuggestions}
+                      onSelect={(selected) => {
+                        const match = batchOptions.find((b) => b.label === selected)
+                        if (match) updateProduct(index, "batchCode", match.value)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Weight (kg)</Label>
+                    <Input type="number" min={0} step="0.01" value={product.weight} onChange={(e) => updateProduct(index, "weight", e.target.value)} />
+                    {stockErrors[index] && (
+                      <p className="text-xs text-destructive">{stockErrors[index]}</p>
+                    )}
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-destructive"
+                      disabled={products.length <= 1}
+                      onClick={() => removeProduct(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Batch Code</Label>
-                  <Input placeholder="Enter batch code" value={product.batchCode} onChange={(e) => updateProduct(index, "batchCode", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Weight (kg)</Label>
-                  <Input type="number" min={0} step="0.01" value={product.weight} onChange={(e) => updateProduct(index, "weight", e.target.value)} />
-                </div>
-                <div className="flex items-end">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-destructive"
-                    disabled={products.length <= 1}
-                    onClick={() => removeProduct(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
             <Button variant="outline" size="sm" onClick={addProduct}>
               <Plus className="h-4 w-4 mr-1" />Add Another Product
             </Button>
