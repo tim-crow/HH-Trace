@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     }
 
     const { data, error } = await resend.emails.send({
-      from: "Hemp Harvests Trace <onboarding@resend.dev>",
+      from: "Hemp Harvests Trace <trace@hempharvests.com.au>",
       to: recipientEmail,
       subject: `New Order: ${orderNumber} — ${customer}`,
       html: `
