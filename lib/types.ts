@@ -21,6 +21,7 @@ export interface TransactionRecord {
   quantity: number
   supplier?: string
   processor?: string
+  customer?: string
   status: "Completed" | "In Progress"
 }
 
@@ -62,16 +63,31 @@ export interface AvailableBatch {
 
 export type OrderStatus = "New" | "In Progress" | "Packed" | "Dispatched" | "Completed"
 
+export type FreightMethod = "Courier" | "Auspost" | "Bulk"
+
+export interface OrderItem {
+  productType: string
+  quantity: number
+  units?: number
+  fulfilled?: boolean
+  batchCode?: string
+}
+
 export interface Order {
   id: string
   orderNumber: string
   customer: string
+  customerAddress?: string
   details: string
+  items?: OrderItem[]
   dateReceived: string
   dueDate: string
+  freight?: FreightMethod
+  freightCarrier?: string
   status: OrderStatus
   createdBy: string
   lastUpdatedBy: string
+  notes?: string
   lastUpdated: string
   deleted?: boolean
 }

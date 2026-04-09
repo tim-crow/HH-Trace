@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import * as React from "react"
 import { Menu, LogOut } from "lucide-react"
 
@@ -37,10 +39,11 @@ import { InventoryTable } from "@/components/inventory-table"
 import { RecordsTable } from "@/components/records-table"
 import { OrderManagement } from "@/components/order-management"
 import { AuditLogView } from "@/components/audit-log-view"
+import { ProcessingAnalytics } from "@/components/processing-analytics"
 import { AssistantChat } from "@/components/assistant-chat"
 import { generateId } from "@/lib/utils"
-import { SAMPLE_INVENTORY, SAMPLE_RECORDS, SAMPLE_ORDERS_DATA } from "@/lib/constants"
-import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order } from "@/lib/types"
+import { supabase } from "@/lib/supabase"
+import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem } from "@/lib/types"
 
 export default function HempTraceabilityDashboard() {
   return (
@@ -54,10 +57,40 @@ function AppContent() {
   const { user, logout, isAdmin } = useAuth()
 
   const [activeSection, setActiveSection] = React.useState("dashboard")
-  const [inventory, setInventory] = React.useState<InventoryItem[]>([...SAMPLE_INVENTORY])
-  const [records, setRecords] = React.useState<TransactionRecord[]>([...SAMPLE_RECORDS])
-  const [orders, setOrders] = React.useState<Order[]>([...SAMPLE_ORDERS_DATA])
+  const [inventory, setInventory] = React.useState<InventoryItem[]>([])
+  const [records, setRecords] = React.useState<TransactionRecord[]>([])
+  const [orders, setOrders] = React.useState<Order[]>([])
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
+  const [outgoingPrefill, setOutgoingPrefill] = React.useState<{ orderId: string; items: OrderItem[]; customer: string; customerAddress: string; freight?: string; freightCarrier?: string } | null>(null)
+
+  React.useEffect(() => {
+    supabase.from('inventory').select('*').then(({ data }) => {
+      if (data) setInventory(data.map((r: any) => ({
+        id: r.id, productType: r.product_type, batchCode: r.batch_code, quantity: r.quantity,
+        location: r.location, lastUpdated: r.last_updated, deleted: r.deleted,
+        deletedAt: r.deleted_at, deletedBy: r.deleted_by,
+      })))
+    })
+    supabase.from('records').select('*').then(({ data }) => {
+      if (data) setRecords(data.map((r: any) => ({
+        id: r.id, type: r.type, date: r.date, productType: r.product_type,
+        batchCode: r.batch_code, quantity: r.quantity, supplier: r.supplier,
+        processor: r.processor, customer: r.customer, status: r.status,
+      })))
+    })
+    supabase.from('orders').select('*').then(({ data }) => {
+      if (data) setOrders(data.map((r: any) => ({
+        id: r.id, orderNumber: r.order_number, customer: r.customer,
+        customerAddress: r.customer_address || "", details: r.details,
+        items: r.items || [],
+        dateReceived: r.date_received, dueDate: r.due_date,
+        freight: r.freight, freightCarrier: r.freight_carrier,
+        notes: r.notes || "",
+        status: r.status, createdBy: r.created_by, lastUpdatedBy: r.last_updated_by,
+        lastUpdated: r.last_updated, deleted: r.deleted,
+      })))
+    })
+  }, [])
   const [message, setMessage] = React.useState("")
   const [messageOpen, setMessageOpen] = React.useState(false)
   const [itemToDelete, setItemToDelete] = React.useState<InventoryItem | null>(null)
@@ -101,6 +134,8 @@ function AppContent() {
     }
     setInventory((prev) => [...prev, newItem])
     setRecords((prev) => [...prev, newRecord])
+    supabase.from('inventory').insert({ id: newItem.id, product_type: newItem.productType, batch_code: newItem.batchCode, quantity: newItem.quantity, location: newItem.location, last_updated: newItem.lastUpdated }).then()
+    supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, supplier: newRecord.supplier, status: newRecord.status }).then()
     logAction(user.name, user.role, "Created Receival", formData.batchCode, `${formData.productType || "Whole Seeds"} — ${formData.quantity} kg from ${formData.supplier || "unknown supplier"} at ${formData.location || "Factory"}`)
     showMessage("Receival record added successfully!")
   }
@@ -141,7 +176,7 @@ function AppContent() {
           if (product.oil && Number.parseFloat(product.oil) > 0) {
             newInventoryItems.push({
               id: generateId("INV"),
-              productType: "Hemp Oil",
+              productType: "Hemp Oil (Raw)",
               batchCode: `${formData.batchId}-OIL${index + 1}`,
               quantity: Number.parseFloat(product.oil),
               location: "Factory",
@@ -149,7 +184,7 @@ function AppContent() {
             })
           }
           if (product.mealProteinKg && Number.parseFloat(product.mealProteinKg) > 0) {
-            const productType = product.mealProtein === "protein" ? "Hemp Protein 65" : "Hemp Meal"
+            const productType = product.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake"
             newInventoryItems.push({
               id: generateId("INV"),
               productType,
@@ -171,10 +206,14 @@ function AppContent() {
                 : item
             )
           )
+          supabase.from('inventory').update({ quantity: Math.max(0, Number.parseFloat(product.kg)), last_updated: new Date().toISOString() }).eq('batch_code', product.batchCode).then()
         }
       })
 
       setInventory((prev) => [...prev, ...newInventoryItems])
+      newInventoryItems.forEach((item) => {
+        supabase.from('inventory').insert({ id: item.id, product_type: item.productType, batch_code: item.batchCode, quantity: item.quantity, location: item.location, last_updated: item.lastUpdated }).then()
+      })
 
       const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
       const newRecord: TransactionRecord = {
@@ -188,6 +227,16 @@ function AppContent() {
         status: "Completed",
       }
       setRecords((prev) => [...prev, newRecord])
+      supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, processor: newRecord.processor, status: newRecord.status }).then()
+      const outputs = newInventoryItems.map(item => ({ productType: item.productType, kg: item.quantity }))
+      supabase.from('processing_runs').insert({
+        id: generateId("PR"),
+        date: formData.date,
+        batch_id: formData.batchId,
+        process_type: processType,
+        total_input_kg: totalKg,
+        outputs: outputs,
+      }).then()
       logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${totalKg} kg input, ${newInventoryItems.length} outputs created`)
       showMessage(`${processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
     }
@@ -209,6 +258,7 @@ function AppContent() {
     setInventory((prev) =>
       prev.map((i) => (i.id === id ? { ...i, ...data, lastUpdated: new Date().toISOString() } : i))
     )
+    supabase.from('inventory').update({ quantity: data.quantity, location: data.location, last_updated: new Date().toISOString() }).eq('id', id).then()
     logAction(user.name, user.role, "Updated Inventory", item?.batchCode || id, `Quantity: ${data.quantity ?? item?.quantity} kg, Location: ${data.location ?? item?.location}`)
     showMessage("Record updated successfully!")
   }
@@ -242,6 +292,8 @@ function AppContent() {
         status: "Completed",
       }
       setRecords((prev) => [...prev, newRecord])
+      supabase.from('inventory').update({ deleted: true, deleted_at: new Date().toISOString(), deleted_by: user.name }).eq('id', itemToDelete.id).then()
+      supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, status: newRecord.status }).then()
       logAction(user.name, user.role, "Deleted Inventory", itemToDelete.batchCode, `Soft-deleted ${itemToDelete.productType} — ${itemToDelete.quantity} kg from ${itemToDelete.location}`)
       showMessage(`Inventory item ${itemToDelete.batchCode} deleted successfully!`)
     }
@@ -257,8 +309,33 @@ function AppContent() {
           : i
       )
     )
+    supabase.from('inventory').update({ deleted: false, deleted_at: null, deleted_by: null, last_updated: new Date().toISOString() }).eq('id', item.id).then()
     logAction(user.name, user.role, "Restored Inventory", item.batchCode, `Restored ${item.productType} — ${item.quantity} kg`)
     showMessage(`Inventory item ${item.batchCode} restored!`)
+  }
+
+  const handleOrdersChange = (newOrders: Order[]) => {
+    setOrders(newOrders)
+    newOrders.forEach((order) => {
+      supabase.from('orders').upsert({
+        id: order.id,
+        order_number: order.orderNumber,
+        customer: order.customer,
+        customer_address: order.customerAddress || "",
+        details: order.details,
+        items: order.items || [],
+        date_received: order.dateReceived,
+        due_date: order.dueDate,
+        freight: order.freight || null,
+        freight_carrier: order.freightCarrier || null,
+        notes: order.notes || null,
+        status: order.status,
+        created_by: order.createdBy,
+        last_updated_by: order.lastUpdatedBy,
+        last_updated: order.lastUpdated,
+        deleted: order.deleted || false,
+      }).then()
+    })
   }
 
   const renderContent = () => {
@@ -278,19 +355,90 @@ function AppContent() {
           />
         )
       case "outgoing":
-        return <OutgoingForm onSubmit={() => {
-          logAction(user.name, user.role, "Created Outgoing", "Dispatch", "Outgoing goods record submitted")
-          showMessage("Outgoing record saved!")
-        }} />
+        return <OutgoingForm
+          inventory={activeInventory}
+          orders={orders}
+          prefill={outgoingPrefill}
+          onSubmit={(products, customerName, customerAddress, freight, fromOrderId) => {
+            // Deduct each product from inventory
+            products.forEach((p) => {
+              setInventory((prev) =>
+                prev.map((item) =>
+                  item.batchCode === p.batchCode
+                    ? { ...item, quantity: Math.max(0, item.quantity - p.weight), lastUpdated: new Date().toISOString() }
+                    : item
+                )
+              )
+              const current = inventory.find((i) => i.batchCode === p.batchCode)
+              if (current) {
+                supabase.from('inventory').update({
+                  quantity: Math.max(0, current.quantity - p.weight),
+                  last_updated: new Date().toISOString(),
+                }).eq('batch_code', p.batchCode).then()
+              }
+            })
+            // Create transaction records
+            products.forEach((p) => {
+              const newRecord: TransactionRecord = {
+                id: generateId("REC"),
+                type: "Outgoing",
+                date: new Date().toISOString().split("T")[0],
+                productType: p.productType,
+                batchCode: p.batchCode,
+                quantity: p.weight,
+                customer: customerName,
+                status: "Completed",
+              }
+              setRecords((prev) => [...prev, newRecord])
+              supabase.from('records').insert({
+                id: newRecord.id, type: newRecord.type, date: newRecord.date,
+                product_type: newRecord.productType, batch_code: newRecord.batchCode,
+                quantity: newRecord.quantity, customer: newRecord.customer,
+                status: newRecord.status,
+              }).then()
+            })
+            // Mark fulfilled items on the linked order (from prefill or dropdown)
+            const linkedOrderId = outgoingPrefill?.orderId || fromOrderId
+            if (linkedOrderId) {
+              const fulfilledTypes = new Set(products.map((p) => p.productType))
+              const updateOrder = (o: Order): Order => {
+                if (o.id !== linkedOrderId) return o
+                const updatedItems = (o.items || []).map((item) =>
+                  fulfilledTypes.has(item.productType) ? { ...item, fulfilled: true, batchCode: products.find((p) => p.productType === item.productType)?.batchCode } : item
+                )
+                const allFulfilled = updatedItems.length > 0 && updatedItems.every((i) => i.fulfilled)
+                return { ...o, items: updatedItems, status: allFulfilled ? "Dispatched" as const : o.status, lastUpdated: new Date().toISOString() }
+              }
+              setOrders((prev) => prev.map(updateOrder))
+              handleOrdersChange(orders.map(updateOrder))
+              setOutgoingPrefill(null)
+            }
+            const totalKg = products.reduce((s, p) => s + p.weight, 0)
+            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `${totalKg} kg to ${customerName} via ${freight || "N/A"}: ${products.map(p => `${p.productType} ${p.batchCode} ${p.weight}kg`).join(", ")}`)
+            showMessage("Outgoing record saved! Inventory updated.")
+          }}
+          onError={showMessage}
+        />
       case "orders":
         return (
           <OrderManagement
             orders={orders}
-            onOrdersChange={setOrders}
+            onOrdersChange={handleOrdersChange}
             isAdmin={isAdmin}
             userName={user.name}
             onAuditLog={(action, target, details) => logAction(user.name, user.role, action, target, details)}
             onMessage={showMessage}
+            onPackedForOutgoing={(order) => {
+              setOutgoingPrefill({
+                orderId: order.id,
+                items: (order.items || []).filter((i) => !i.fulfilled),
+                customer: order.customer,
+                customerAddress: order.customerAddress || "",
+                freight: order.freight,
+                freightCarrier: order.freightCarrier,
+              })
+              setActiveSection("outgoing")
+            }}
           />
         )
       case "inventory":
@@ -306,6 +454,8 @@ function AppContent() {
         )
       case "records":
         return <RecordsTable records={records} />
+      case "analytics":
+        return <ProcessingAnalytics />
       case "audit":
         return isAdmin ? <AuditLogView /> : null
       default:
