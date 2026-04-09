@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, AlertCircle, Loader2, Truck, CheckCircle2 } from "lucide-react"
+import { Plus, Trash2, AlertCircle } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { HEMP_PRODUCTS, FINISHED_GOODS, BOX_SIZES, PALLET_SIZES, PRODUCT_UNIT_WEIGHTS } from "@/lib/constants"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
@@ -54,11 +54,6 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
   const [selectedOrderId, setSelectedOrderId] = React.useState("")
   const [savedCustomers, setSavedCustomers] = React.useState(getCustomers())
   const [savedFreight, setSavedFreight] = React.useState(getFreightCompanies())
-  const [courierQuoting, setCourierQuoting] = React.useState(false)
-  const [courierQuotes, setCourierQuotes] = React.useState<{carrier: string; service: string; price: number; provider: string}[]>([])
-  const [courierBooked, setCourierBooked] = React.useState<{carrier: string; price: number; trackingNumber?: string} | null>(null)
-  const [courierBooking, setCourierBooking] = React.useState(false)
-  const [courierError, setCourierError] = React.useState("")
 
   const openOrders = React.useMemo(
     () => orders.filter((o) => !o.deleted && o.status !== "Completed"),
@@ -196,122 +191,6 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       return null
     })
   }, [products, getAvailableStock])
-
-  const parsedBoxDimensions = React.useMemo(() => {
-    const sizeStr = boxSize === "Other" ? customBoxSize : boxSize
-    // Parse dimensions from strings like "Large 30x30x40cm" or "43x31x24cm"
-    const match = sizeStr.match(/(\d+)\s*x\s*(\d+)\s*x\s*(\d+)/)
-    if (!match) return null
-    return { lengthCm: parseInt(match[1]), widthCm: parseInt(match[2]), heightCm: parseInt(match[3]) }
-  }, [boxSize, customBoxSize])
-
-  const parseAddress = (raw: string) => {
-    // Try to parse "street, suburb state postcode" from a free-text address
-    const lines = raw.split(/\n|,/).map((l) => l.trim()).filter(Boolean)
-    const lastLine = lines[lines.length - 1] || ""
-    const statePostMatch = lastLine.match(/([A-Z]{2,3})\s+(\d{4})$/)
-    if (statePostMatch) {
-      const state = statePostMatch[1]
-      const postcode = statePostMatch[2]
-      const suburb = lastLine.replace(statePostMatch[0], "").trim()
-      const street = lines.slice(0, -1).join(", ") || suburb
-      return { street, suburb, state, postcode }
-    }
-    // Fallback: last word as postcode if 4 digits
-    const postcodeMatch = raw.match(/(\d{4})\s*$/)
-    return {
-      street: lines[0] || raw,
-      suburb: lines[1] || "",
-      state: "",
-      postcode: postcodeMatch?.[1] || "",
-    }
-  }
-
-  const buildQuoteRequest = () => {
-    const dims = parsedBoxDimensions
-    if (!dims || boxWeights.length === 0) return null
-    const to = parseAddress(customerAddress)
-    return {
-      from: {
-        name: "Hemp Harvests",
-        company: "Hemp Harvests Pty Ltd",
-        street: process.env.NEXT_PUBLIC_FACTORY_STREET || "",
-        suburb: process.env.NEXT_PUBLIC_FACTORY_SUBURB || "",
-        state: process.env.NEXT_PUBLIC_FACTORY_STATE || "",
-        postcode: process.env.NEXT_PUBLIC_FACTORY_POSTCODE || "",
-        phone: process.env.NEXT_PUBLIC_FACTORY_PHONE || "",
-        email: process.env.NEXT_PUBLIC_FACTORY_EMAIL || "",
-      },
-      to: { name: customerName, ...to },
-      boxes: boxWeights.map((w) => ({
-        weightKg: w,
-        lengthCm: dims.lengthCm,
-        widthCm: dims.widthCm,
-        heightCm: dims.heightCm,
-      })),
-    }
-  }
-
-  const handleCourierQuote = async () => {
-    const req = buildQuoteRequest()
-    if (!req) {
-      onError("Please select a box size and enter box weights before quoting.")
-      return
-    }
-    if (!customerAddress.trim()) {
-      onError("Please enter a delivery address before quoting.")
-      return
-    }
-
-    setCourierQuoting(true)
-    setCourierQuotes([])
-    setCourierBooked(null)
-    setCourierError("")
-
-    try {
-      const res = await fetch("/api/courier-quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "quote", request: req }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setCourierError(data.error || "Failed to get quotes")
-      } else {
-        setCourierQuotes(data.quotes)
-      }
-    } catch (err: any) {
-      setCourierError(err.message || "Network error getting quotes")
-    } finally {
-      setCourierQuoting(false)
-    }
-  }
-
-  const handleCourierBook = async () => {
-    const req = buildQuoteRequest()
-    if (!req || courierQuotes.length === 0) return
-
-    setCourierBooking(true)
-    setCourierError("")
-
-    try {
-      const res = await fetch("/api/courier-quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "book", request: req, quotes: courierQuotes }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setCourierError(data.error || "Booking failed")
-      } else {
-        setCourierBooked(data.booking)
-      }
-    } catch (err: any) {
-      setCourierError(err.message || "Network error booking shipment")
-    } finally {
-      setCourierBooking(false)
-    }
-  }
 
   const handleSubmit = () => {
     const errors = products
@@ -623,79 +502,6 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
               </div>
             </div>
           )}
-          {freightMethod === "Courier" && boxWeights.length > 0 && customerAddress.trim() && (
-            <div className="space-y-3 rounded-lg border p-4 bg-muted/30">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <Truck className="h-4 w-4" /> Courier Quotes
-                </h4>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCourierQuote}
-                  disabled={courierQuoting || courierBooking}
-                >
-                  {courierQuoting ? (
-                    <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Quoting...</>
-                  ) : courierQuotes.length > 0 ? "Re-quote" : "Get Courier Quotes"}
-                </Button>
-              </div>
-
-              {courierError && (
-                <p className="text-sm text-destructive">{courierError}</p>
-              )}
-
-              {courierQuotes.length > 0 && !courierBooked && (
-                <div className="space-y-2">
-                  <div className="grid gap-2">
-                    {courierQuotes.map((q, i) => (
-                      <div
-                        key={i}
-                        className={`flex items-center justify-between rounded-md border p-3 text-sm ${i === 0 ? "border-green-500 bg-green-50 dark:bg-green-950/30" : ""}`}
-                      >
-                        <div>
-                          <span className="font-medium">{q.carrier}</span>
-                          <span className="text-muted-foreground ml-2">{q.service}</span>
-                          <span className="text-[10px] ml-2 text-muted-foreground">({q.provider})</span>
-                        </div>
-                        <div className="font-semibold">
-                          ${q.price.toFixed(2)}
-                          {i === 0 && <span className="text-green-600 text-xs ml-1">cheapest</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    onClick={handleCourierBook}
-                    disabled={courierBooking}
-                    className="w-full"
-                  >
-                    {courierBooking ? (
-                      <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Booking cheapest...</>
-                    ) : (
-                      `Book ${courierQuotes[0].carrier} — $${courierQuotes[0].price.toFixed(2)} & Email Label to Factory`
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {courierBooked && (
-                <div className="flex items-start gap-3 rounded-md border border-green-500 bg-green-50 p-3 dark:bg-green-950/30">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-                  <div className="text-sm">
-                    <p className="font-medium text-green-800 dark:text-green-200">
-                      Booked with {courierBooked.carrier} — ${courierBooked.price.toFixed(2)}
-                    </p>
-                    {courierBooked.trackingNumber && (
-                      <p className="text-muted-foreground">Tracking: {courierBooked.trackingNumber}</p>
-                    )}
-                    <p className="text-muted-foreground">Label emailed to factory.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           <div className="flex items-center gap-2">
             <Checkbox />
             <label className="text-sm">COA meets spec</label>
