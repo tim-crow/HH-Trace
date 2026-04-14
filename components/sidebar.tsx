@@ -12,6 +12,7 @@ import {
   Home,
   Leaf,
   ScrollText,
+  BarChart3,
 } from "lucide-react"
 import type { NavigationSection } from "@/lib/types"
 
@@ -30,6 +31,7 @@ const navigationItems: NavigationSection[] = [
       { title: "Orders", icon: ClipboardList, href: "orders" },
       { title: "Live Inventory", icon: Warehouse, href: "inventory" },
       { title: "Records", icon: FileText, href: "records" },
+      { title: "Analytics", icon: BarChart3, href: "analytics" },
     ],
   },
 ]
