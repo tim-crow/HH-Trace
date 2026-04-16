@@ -43,6 +43,7 @@ import { ProcessingAnalytics } from "@/components/processing-analytics"
 import { AssistantChat } from "@/components/assistant-chat"
 import { generateId } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
+import { loadAllSavedEntries } from "@/lib/remembered-entries"
 import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem } from "@/lib/types"
 
 export default function HempTraceabilityDashboard() {
@@ -90,6 +91,7 @@ function AppContent() {
         lastUpdated: r.last_updated, deleted: r.deleted,
       })))
     })
+    loadAllSavedEntries()
   }, [])
   const [message, setMessage] = React.useState("")
   const [messageOpen, setMessageOpen] = React.useState(false)
