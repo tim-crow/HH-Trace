@@ -37,19 +37,21 @@ interface ProcessingFormsProps {
 
 const emptyBulk = (): BulkProduct => ({ bag: "", productType: "", kg: "", batchCode: "", notes: "" })
 const emptyFinished = (): FinishedProduct => ({ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "" })
+const firstBulk = (): BulkProduct => ({ ...emptyBulk(), bag: "1" })
+const firstFinished = (): FinishedProduct => ({ ...emptyFinished(), bin: "1" })
 
 export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubmit, editRun, onUpdate, onCancelEdit }: ProcessingFormsProps) {
   // Per-tab state (so dehulling and pressing don't share rows when not editing)
-  const [dehullBulk, setDehullBulk] = React.useState<BulkProduct[]>([emptyBulk()])
-  const [dehullFinished, setDehullFinished] = React.useState<FinishedProduct[]>([emptyFinished()])
+  const [dehullBulk, setDehullBulk] = React.useState<BulkProduct[]>([firstBulk()])
+  const [dehullFinished, setDehullFinished] = React.useState<FinishedProduct[]>([firstFinished()])
   const [dehullDate, setDehullDate] = React.useState("")
   const [dehullBatch, setDehullBatch] = React.useState("")
   const [dehullStaffCount, setDehullStaffCount] = React.useState("")
   const [dehullStaffNames, setDehullStaffNames] = React.useState("")
   const [dehullNotes, setDehullNotes] = React.useState("")
 
-  const [pressBulk, setPressBulk] = React.useState<BulkProduct[]>([emptyBulk()])
-  const [pressFinished, setPressFinished] = React.useState<FinishedProduct[]>([emptyFinished()])
+  const [pressBulk, setPressBulk] = React.useState<BulkProduct[]>([firstBulk()])
+  const [pressFinished, setPressFinished] = React.useState<FinishedProduct[]>([firstFinished()])
   const [pressDate, setPressDate] = React.useState("")
   const [pressBatch, setPressBatch] = React.useState("")
   const [pressStaffCount, setPressStaffCount] = React.useState("")
@@ -120,7 +122,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       onSubmit(formData, "dehulling", dehullBulk, dehullFinished)
       // Reset after fresh submit
       setDehullDate(""); setDehullBatch(""); setDehullStaffCount(""); setDehullStaffNames(""); setDehullNotes("")
-      setDehullBulk([emptyBulk()]); setDehullFinished([emptyFinished()])
+      setDehullBulk([firstBulk()]); setDehullFinished([firstFinished()])
     }
   }
   const handlePressingSubmit = () => {
@@ -135,7 +137,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
     } else {
       onSubmit(formData, "pressing", pressBulk, pressFinished)
       setPressDate(""); setPressBatch(""); setPressStaffCount(""); setPressStaffNames(""); setPressNotes(""); setPressOilType("")
-      setPressBulk([emptyBulk()]); setPressFinished([emptyFinished()])
+      setPressBulk([firstBulk()]); setPressFinished([firstFinished()])
     }
   }
 
@@ -153,7 +155,11 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
           </p>
         </div>
         {isEditing && onCancelEdit && (
-          <Button variant="outline" size="sm" onClick={onCancelEdit}>
+          <Button
+            size="sm"
+            onClick={onCancelEdit}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
             <X className="h-4 w-4 mr-1" /> Cancel Edit
           </Button>
         )}
@@ -212,7 +218,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                     </div>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" onClick={() => setDehullFinished((p) => [...p, emptyFinished()])}>
+                <Button variant="outline" size="sm" onClick={() => setDehullFinished((p) => [...p, { ...emptyFinished(), bin: nextBin(p) }])}>
                   <Plus className="h-4 w-4 mr-1" />Add More Finished Product Output
                 </Button>
               </div>
@@ -282,7 +288,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                     </div>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" onClick={() => setPressFinished((p) => [...p, emptyFinished()])}>
+                <Button variant="outline" size="sm" onClick={() => setPressFinished((p) => [...p, { ...emptyFinished(), bin: nextBin(p) }])}>
                   <Plus className="h-4 w-4 mr-1" />Add More Finished Product Output
                 </Button>
               </div>
@@ -337,6 +343,23 @@ function removeAt<T>(setter: React.Dispatch<React.SetStateAction<T[]>>, index: n
   setter((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
 }
 
+/** Compute the next sequential numeric value for a list of rows, given how to read the field. */
+function nextNumber(values: (string | undefined)[]): string {
+  const max = values.reduce<number>((acc, v) => {
+    const n = parseInt(String(v ?? "").trim(), 10)
+    return Number.isFinite(n) && n > acc ? n : acc
+  }, 0)
+  return String(max + 1)
+}
+
+function nextBin(rows: FinishedProduct[]): string {
+  return nextNumber(rows.map((r) => r.bin))
+}
+
+function nextBag(rows: BulkProduct[]): string {
+  return nextNumber(rows.map((r) => r.bag))
+}
+
 interface BulkProductSectionProps {
   products: BulkProduct[]
   onChange: React.Dispatch<React.SetStateAction<BulkProduct[]>>
@@ -389,7 +412,7 @@ function BulkProductSection({ products, onChange, getAvailableBatches, productOp
           </div>
         </div>
       ))}
-      <Button variant="outline" size="sm" onClick={() => onChange((prev) => [...prev, emptyBulk()])}>
+      <Button variant="outline" size="sm" onClick={() => onChange((prev) => [...prev, { ...emptyBulk(), bag: nextBag(prev) }])}>
         <Plus className="h-4 w-4 mr-1" />Add More Product Input
       </Button>
     </div>
