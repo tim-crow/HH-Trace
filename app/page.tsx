@@ -455,7 +455,21 @@ function AppContent() {
           />
         )
       case "records":
-        return <RecordsTable records={records} />
+        return <RecordsTable records={records} isAdmin={isAdmin} onRecordUpdate={(updated) => {
+          setRecords((prev) => prev.map((r) => r.id === updated.id ? updated : r))
+          supabase.from('records').update({
+            date: updated.date,
+            product_type: updated.productType,
+            batch_code: updated.batchCode,
+            quantity: updated.quantity,
+            supplier: updated.supplier || null,
+            processor: updated.processor || null,
+            customer: updated.customer || null,
+            status: updated.status,
+          }).eq('id', updated.id).then()
+          logAction(user.name, user.role, "Edited Record", updated.batchCode, `Modified ${updated.type} record: ${updated.productType} — ${updated.quantity} kg`)
+          showMessage(`Record ${updated.batchCode} updated!`)
+        }} />
       case "analytics":
         return <ProcessingAnalytics />
       case "audit":
