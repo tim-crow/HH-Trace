@@ -44,7 +44,7 @@ import { AssistantChat } from "@/components/assistant-chat"
 import { generateId } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
-import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem } from "@/lib/types"
+import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, ProcessingRun } from "@/lib/types"
 
 export default function HempTraceabilityDashboard() {
   return (
@@ -63,6 +63,7 @@ function AppContent() {
   const [orders, setOrders] = React.useState<Order[]>([])
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
   const [outgoingPrefill, setOutgoingPrefill] = React.useState<{ orderId: string; items: OrderItem[]; customer: string; customerAddress: string; freight?: string; freightCarrier?: string } | null>(null)
+  const [editingProcessingRun, setEditingProcessingRun] = React.useState<ProcessingRun | null>(null)
 
   React.useEffect(() => {
     supabase.from('inventory').select('*').then(({ data }) => {
@@ -77,6 +78,10 @@ function AppContent() {
         id: r.id, type: r.type, date: r.date, productType: r.product_type,
         batchCode: r.batch_code, quantity: r.quantity, supplier: r.supplier,
         processor: r.processor, customer: r.customer, status: r.status,
+        processingRunId: r.processing_run_id || undefined,
+        deleted: r.deleted || false,
+        deletedAt: r.deleted_at || undefined,
+        deletedBy: r.deleted_by || undefined,
       })))
     })
     supabase.from('orders').select('*').then(({ data }) => {
@@ -143,7 +148,7 @@ function AppContent() {
   }
 
   const handleProcessingSubmit = (
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string },
+    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string },
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[]
@@ -218,6 +223,7 @@ function AppContent() {
       })
 
       const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
+      const runId = generateId("PR")
       const newRecord: TransactionRecord = {
         id: generateId("REC"),
         type: "Processing",
@@ -227,17 +233,28 @@ function AppContent() {
         quantity: totalKg,
         processor: `${formData.staffNames} (${formData.staffCount} staff)`,
         status: "Completed",
+        processingRunId: runId,
       }
       setRecords((prev) => [...prev, newRecord])
-      supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, processor: newRecord.processor, status: newRecord.status }).then()
+      supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, processor: newRecord.processor, status: newRecord.status, processing_run_id: runId }).then()
       const outputs = newInventoryItems.map(item => ({ productType: item.productType, kg: item.quantity }))
+      // Save the entire form snapshot so it can be reopened and edited later
+      const formSnapshot = {
+        staffCount: formData.staffCount,
+        staffNames: formData.staffNames,
+        notes: formData.notes || "",
+        oilPressType: formData.oilPressType || "",
+        bulkProducts,
+        finishedProducts,
+      }
       supabase.from('processing_runs').insert({
-        id: generateId("PR"),
+        id: runId,
         date: formData.date,
         batch_id: formData.batchId,
         process_type: processType,
         total_input_kg: totalKg,
         outputs: outputs,
+        form_data: formSnapshot,
       }).then()
       logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${totalKg} kg input, ${newInventoryItems.length} outputs created`)
       showMessage(`${processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
@@ -316,6 +333,139 @@ function AppContent() {
     showMessage(`Inventory item ${item.batchCode} restored!`)
   }
 
+  const handleOpenProcessingForEdit = async (record: TransactionRecord) => {
+    if (record.type !== "Processing") return
+    // Try to find the processing_run by linked id, or fall back to batch_id
+    const query = supabase.from('processing_runs').select('*')
+    const { data } = record.processingRunId
+      ? await query.eq('id', record.processingRunId).maybeSingle()
+      : await query.eq('batch_id', record.batchCode).order('date', { ascending: false }).limit(1).maybeSingle()
+
+    if (!data) {
+      // No saved snapshot — synthesize a minimal one from the record so the form still opens
+      const processType: "dehulling" | "pressing" =
+        record.productType.toLowerCase().includes("press") ? "pressing" : "dehulling"
+      const match = (record.processor || "").match(/^(.*?)\s*\((\d+)\s*staff\)\s*$/i)
+      const staffNames = match ? match[1] : (record.processor || "")
+      const staffCount = match ? match[2] : ""
+      setEditingProcessingRun({
+        id: record.processingRunId || record.id,
+        date: record.date,
+        batchId: record.batchCode,
+        processType,
+        staffCount,
+        staffNames,
+        notes: "",
+        bulkProducts: [{ bag: "", productType: "", kg: String(record.quantity || ""), batchCode: "", notes: "" }],
+        finishedProducts: [{ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "" }],
+        totalInputKg: record.quantity,
+      })
+      showMessage("No saved form snapshot for this older record — opened a partial form pre-filled from the record summary.")
+    } else {
+      const fd = (data as any).form_data || {}
+      setEditingProcessingRun({
+        id: (data as any).id,
+        date: (data as any).date,
+        batchId: (data as any).batch_id,
+        processType: (data as any).process_type,
+        staffCount: fd.staffCount || "",
+        staffNames: fd.staffNames || "",
+        notes: fd.notes || "",
+        oilPressType: fd.oilPressType || "",
+        bulkProducts: Array.isArray(fd.bulkProducts) && fd.bulkProducts.length
+          ? fd.bulkProducts
+          : [{ bag: "", productType: "", kg: "", batchCode: "", notes: "" }],
+        finishedProducts: Array.isArray(fd.finishedProducts) && fd.finishedProducts.length
+          ? fd.finishedProducts
+          : [{ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "" }],
+        totalInputKg: (data as any).total_input_kg ?? record.quantity,
+      })
+    }
+    setActiveSection("processing")
+  }
+
+  const handleProcessingRunUpdate = (
+    runId: string,
+    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string },
+    processType: string,
+    bulkProducts: BulkProduct[],
+    finishedProducts: FinishedProduct[],
+  ) => {
+    const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
+    const formSnapshot = {
+      staffCount: formData.staffCount,
+      staffNames: formData.staffNames,
+      notes: formData.notes || "",
+      oilPressType: formData.oilPressType || "",
+      bulkProducts,
+      finishedProducts,
+    }
+    // Update the processing_runs row in place
+    supabase.from('processing_runs').update({
+      date: formData.date,
+      batch_id: formData.batchId,
+      process_type: processType,
+      total_input_kg: totalKg,
+      form_data: formSnapshot,
+    }).eq('id', runId).then()
+
+    // Update the linked records row to keep summary in sync
+    const linkedRecord = records.find((r) => r.processingRunId === runId)
+    if (linkedRecord) {
+      const updatedRecord: TransactionRecord = {
+        ...linkedRecord,
+        date: formData.date,
+        batchCode: formData.batchId,
+        quantity: totalKg,
+        productType: `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
+        processor: `${formData.staffNames} (${formData.staffCount} staff)`,
+      }
+      setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r)))
+      supabase.from('records').update({
+        date: updatedRecord.date,
+        batch_code: updatedRecord.batchCode,
+        quantity: updatedRecord.quantity,
+        product_type: updatedRecord.productType,
+        processor: updatedRecord.processor,
+      }).eq('id', updatedRecord.id).then()
+    }
+
+    logAction(user.name, user.role, "Edited Processing", formData.batchId, `Updated ${processType} run — ${totalKg} kg total, ${bulkProducts.length} bulk lines, ${finishedProducts.length} finished lines`)
+    showMessage(`${processType.charAt(0).toUpperCase() + processType.slice(1)} record updated!`)
+    setEditingProcessingRun(null)
+    setActiveSection("records")
+  }
+
+  const handleRecordDelete = (record: TransactionRecord) => {
+    if (!isAdmin) {
+      showMessage("Only admins can delete records.")
+      return
+    }
+    setConfirmAction({
+      title: `Delete ${record.type} Record?`,
+      description: `This will soft-delete the ${record.type} record for batch ${record.batchCode} (${record.productType}, ${record.quantity} kg). It can be restored later by an admin. Inventory and ledger quantities are NOT retroactively adjusted.`,
+      onConfirm: () => {
+        const now = new Date().toISOString()
+        setRecords((prev) =>
+          prev.map((r) => (r.id === record.id ? { ...r, deleted: true, deletedAt: now, deletedBy: user.name } : r))
+        )
+        supabase.from('records').update({ deleted: true, deleted_at: now, deleted_by: user.name }).eq('id', record.id).then()
+        logAction(user.name, user.role, "Deleted Record", record.batchCode, `Soft-deleted ${record.type} record: ${record.productType} — ${record.quantity} kg`)
+        showMessage(`${record.type} record for ${record.batchCode} deleted.`)
+      },
+    })
+  }
+
+  const handleRecordRestore = (record: TransactionRecord) => {
+    if (!isAdmin) return
+    setRecords((prev) =>
+      prev.map((r) => (r.id === record.id ? { ...r, deleted: false, deletedAt: undefined, deletedBy: undefined } : r))
+    )
+    supabase.from('records').update({ deleted: false, deleted_at: null, deleted_by: null }).eq('id', record.id).then()
+    logAction(user.name, user.role, "Restored Record", record.batchCode, `Restored ${record.type} record: ${record.productType} — ${record.quantity} kg`)
+    showMessage(`${record.type} record for ${record.batchCode} restored.`)
+  }
+
   const handleOrdersChange = (newOrders: Order[]) => {
     setOrders(newOrders)
     newOrders.forEach((order) => {
@@ -354,6 +504,9 @@ function AppContent() {
               logAction(user.name, user.role, "Created Processing", "Additional", "Additional processing record submitted")
               showMessage("Additional processing record saved!")
             }}
+            editRun={editingProcessingRun}
+            onUpdate={handleProcessingRunUpdate}
+            onCancelEdit={() => { setEditingProcessingRun(null); setActiveSection("records") }}
           />
         )
       case "outgoing":
@@ -455,21 +608,28 @@ function AppContent() {
           />
         )
       case "records":
-        return <RecordsTable records={records} isAdmin={isAdmin} onRecordUpdate={(updated) => {
-          setRecords((prev) => prev.map((r) => r.id === updated.id ? updated : r))
-          supabase.from('records').update({
-            date: updated.date,
-            product_type: updated.productType,
-            batch_code: updated.batchCode,
-            quantity: updated.quantity,
-            supplier: updated.supplier || null,
-            processor: updated.processor || null,
-            customer: updated.customer || null,
-            status: updated.status,
-          }).eq('id', updated.id).then()
-          logAction(user.name, user.role, "Edited Record", updated.batchCode, `Modified ${updated.type} record: ${updated.productType} — ${updated.quantity} kg`)
-          showMessage(`Record ${updated.batchCode} updated!`)
-        }} />
+        return <RecordsTable
+          records={records}
+          isAdmin={isAdmin}
+          onOpenProcessingForm={handleOpenProcessingForEdit}
+          onRecordDelete={handleRecordDelete}
+          onRecordRestore={handleRecordRestore}
+          onRecordUpdate={(updated) => {
+            setRecords((prev) => prev.map((r) => r.id === updated.id ? updated : r))
+            supabase.from('records').update({
+              date: updated.date,
+              product_type: updated.productType,
+              batch_code: updated.batchCode,
+              quantity: updated.quantity,
+              supplier: updated.supplier || null,
+              processor: updated.processor || null,
+              customer: updated.customer || null,
+              status: updated.status,
+            }).eq('id', updated.id).then()
+            logAction(user.name, user.role, "Edited Record", updated.batchCode, `Modified ${updated.type} record: ${updated.productType} — ${updated.quantity} kg`)
+            showMessage(`Record ${updated.batchCode} updated!`)
+          }}
+        />
       case "analytics":
         return <ProcessingAnalytics />
       case "audit":

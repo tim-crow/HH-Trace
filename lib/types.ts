@@ -23,6 +23,30 @@ export interface TransactionRecord {
   processor?: string
   customer?: string
   status: "Completed" | "In Progress"
+  /** For Processing records: link to the saved processing_runs row that holds the full form snapshot */
+  processingRunId?: string
+  deleted?: boolean
+  deletedAt?: string
+  deletedBy?: string
+}
+
+/**
+ * A complete snapshot of a processing form submission so it can be reopened
+ * and edited later. Stored in the `processing_runs` table with the entire
+ * form state in `form_data`.
+ */
+export interface ProcessingRun {
+  id: string
+  date: string
+  batchId: string
+  processType: "dehulling" | "pressing"
+  staffCount: string
+  staffNames: string
+  notes: string
+  oilPressType?: string
+  bulkProducts: BulkProduct[]
+  finishedProducts: FinishedProduct[]
+  totalInputKg: number
 }
 
 export interface BulkProduct {
