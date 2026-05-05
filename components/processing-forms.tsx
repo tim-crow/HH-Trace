@@ -168,7 +168,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       {isEditing && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          You are editing an existing processing record. Saving will overwrite the saved form. Inventory and ledger quantities are not retroactively adjusted — fix those separately if needed.
+          You are editing an existing processing record. Saving will overwrite the saved form and update the finished-product inventory for this batch to match the new yields.
         </div>
       )}
 

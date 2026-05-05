@@ -18,6 +18,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Plus, Eye, Edit, Search, Printer, Download, Trash2 } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { cn, generateId } from "@/lib/utils"
@@ -72,6 +82,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
   const [viewOrder, setViewOrder] = React.useState<Order | null>(null)
   const [editOrder, setEditOrder] = React.useState<Order | null>(null)
   const [showNewForm, setShowNewForm] = React.useState(false)
+  const [orderToDelete, setOrderToDelete] = React.useState<Order | null>(null)
 
   const customerNames = React.useMemo(() => {
     const names = new Set(orders.filter((o) => !o.deleted).map((o) => o.customer))
@@ -623,7 +634,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
                   </Select>
                 </div>
                 <div className="flex items-end">
-                  <Button variant="destructive" size="sm" onClick={() => { handleDelete(editOrder); setEditOrder(null) }}>
+                  <Button variant="destructive" size="sm" onClick={() => setOrderToDelete(editOrder)}>
                     Delete Order
                   </Button>
                 </div>
@@ -644,6 +655,35 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
         onSubmit={handleCreateOrder}
         customerNames={customerNames}
       />
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!orderToDelete} onOpenChange={(open) => { if (!open) setOrderToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {orderToDelete && (
+                <>This will delete order <strong>{orderToDelete.orderNumber}</strong> for {orderToDelete.customer}. The record will be kept and can be restored later.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (orderToDelete) {
+                  handleDelete(orderToDelete)
+                  setEditOrder(null)
+                  setOrderToDelete(null)
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

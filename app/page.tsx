@@ -156,53 +156,43 @@ function AppContent() {
     const doProcess = () => {
       const newInventoryItems: InventoryItem[] = []
 
+      // Aggregate yields across all bins so each product stays under the single
+      // processing batch ID (e.g. all hemp hearts from batch 11226 → batchCode "11226").
+      const totals: Record<string, number> = {}
+      const addTotal = (productType: string, value: string | undefined) => {
+        const n = Number.parseFloat(value || "")
+        if (Number.isFinite(n) && n > 0) {
+          totals[productType] = (totals[productType] || 0) + n
+        }
+      }
+
       if (processType === "dehulling") {
-        finishedProducts.forEach((product, index) => {
-          const entries: { field: keyof FinishedProduct; type: string; suffix: string }[] = [
-            { field: "hearts", type: "Hemp Hearts", suffix: "H" },
-            { field: "hulls", type: "Hemp Hulls", suffix: "HL" },
-            { field: "lights", type: "Hemp Lights", suffix: "L" },
-            { field: "overs", type: "Overs", suffix: "O" },
-          ]
-          entries.forEach(({ field, type, suffix }) => {
-            const value = product[field]
-            if (value && Number.parseFloat(value) > 0) {
-              newInventoryItems.push({
-                id: generateId("INV"),
-                productType: type,
-                batchCode: `${formData.batchId}-${suffix}${index + 1}`,
-                quantity: Number.parseFloat(value),
-                location: "Factory",
-                lastUpdated: new Date().toISOString(),
-              })
-            }
-          })
+        finishedProducts.forEach((product) => {
+          addTotal("Hemp Hearts", product.hearts)
+          addTotal("Hemp Hulls", product.hulls)
+          addTotal("Hemp Lights", product.lights)
+          addTotal("Overs", product.overs)
         })
       } else if (processType === "pressing") {
-        finishedProducts.forEach((product, index) => {
-          if (product.oil && Number.parseFloat(product.oil) > 0) {
-            newInventoryItems.push({
-              id: generateId("INV"),
-              productType: "Hemp Oil (Raw)",
-              batchCode: `${formData.batchId}-OIL${index + 1}`,
-              quantity: Number.parseFloat(product.oil),
-              location: "Factory",
-              lastUpdated: new Date().toISOString(),
-            })
-          }
+        finishedProducts.forEach((product) => {
+          addTotal("Hemp Oil (Raw)", product.oil)
           if (product.mealProteinKg && Number.parseFloat(product.mealProteinKg) > 0) {
             const productType = product.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake"
-            newInventoryItems.push({
-              id: generateId("INV"),
-              productType,
-              batchCode: `${formData.batchId}-${product.mealProtein?.toUpperCase() || "MEAL"}${index + 1}`,
-              quantity: Number.parseFloat(product.mealProteinKg),
-              location: "Factory",
-              lastUpdated: new Date().toISOString(),
-            })
+            addTotal(productType, product.mealProteinKg)
           }
         })
       }
+
+      Object.entries(totals).forEach(([productType, quantity]) => {
+        newInventoryItems.push({
+          id: generateId("INV"),
+          productType,
+          batchCode: formData.batchId,
+          quantity,
+          location: "Factory",
+          lastUpdated: new Date().toISOString(),
+        })
+      })
 
       bulkProducts.forEach((product) => {
         if (product.kg && Number.parseFloat(product.kg) > 0) {
@@ -408,6 +398,83 @@ function AppContent() {
       total_input_kg: totalKg,
       form_data: formSnapshot,
     }).eq('id', runId).then()
+
+    // Rebuild this run's finished-product inventory from the edited form.
+    // All yields aggregate per product type under the single batch ID
+    // (e.g. all hemp hearts → batchCode "11226"). Existing inventory rows
+    // tied to this batch (either "11226" or legacy "11226-H1" / "11226-OIL1"
+    // suffixed codes) are updated, created, or removed to match the form.
+    const batchId = formData.batchId
+    const newTotals: Record<string, number> = {}
+    const addTotal = (productType: string, value: string | undefined) => {
+      const n = Number.parseFloat(value || "")
+      if (Number.isFinite(n) && n > 0) {
+        newTotals[productType] = (newTotals[productType] || 0) + n
+      }
+    }
+    if (processType === "dehulling") {
+      finishedProducts.forEach((p) => {
+        addTotal("Hemp Hearts", p.hearts)
+        addTotal("Hemp Hulls", p.hulls)
+        addTotal("Hemp Lights", p.lights)
+        addTotal("Overs", p.overs)
+      })
+    } else if (processType === "pressing") {
+      finishedProducts.forEach((p) => {
+        addTotal("Hemp Oil (Raw)", p.oil)
+        if (p.mealProteinKg && Number.parseFloat(p.mealProteinKg) > 0) {
+          addTotal(p.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake", p.mealProteinKg)
+        }
+      })
+    }
+
+    const now = new Date().toISOString()
+    const linkedItems = inventory.filter(
+      (i) => !i.deleted && (i.batchCode === batchId || i.batchCode.startsWith(`${batchId}-`))
+    )
+    let nextInventory = [...inventory]
+    const matchedIds = new Set<string>()
+
+    Object.entries(newTotals).forEach(([productType, qty]) => {
+      // Prefer a row already on the bare batch ID; fall back to any linked row of this product type.
+      const match =
+        linkedItems.find((i) => i.productType === productType && i.batchCode === batchId) ||
+        linkedItems.find((i) => i.productType === productType && !matchedIds.has(i.id))
+      if (match) {
+        matchedIds.add(match.id)
+        nextInventory = nextInventory.map((i) =>
+          i.id === match.id ? { ...i, batchCode: batchId, quantity: qty, lastUpdated: now } : i
+        )
+        supabase.from('inventory')
+          .update({ batch_code: batchId, quantity: qty, last_updated: now })
+          .eq('id', match.id).then()
+      } else {
+        const newItem: InventoryItem = {
+          id: generateId("INV"),
+          productType,
+          batchCode: batchId,
+          quantity: qty,
+          location: "Factory",
+          lastUpdated: now,
+        }
+        nextInventory.push(newItem)
+        supabase.from('inventory').insert({
+          id: newItem.id, product_type: newItem.productType, batch_code: newItem.batchCode,
+          quantity: newItem.quantity, location: newItem.location, last_updated: newItem.lastUpdated,
+        }).then()
+      }
+    })
+
+    // Any leftover linked rows (extra suffixed entries, or product types
+    // that have been zeroed out in the edited form) are removed.
+    linkedItems.forEach((item) => {
+      if (!matchedIds.has(item.id)) {
+        nextInventory = nextInventory.filter((i) => i.id !== item.id)
+        supabase.from('inventory').delete().eq('id', item.id).then()
+      }
+    })
+
+    setInventory(nextInventory)
 
     // Update the linked records row to keep summary in sync
     const linkedRecord = records.find((r) => r.processingRunId === runId)
