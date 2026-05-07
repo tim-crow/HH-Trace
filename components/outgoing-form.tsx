@@ -193,9 +193,25 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
   }, [products, getAvailableStock])
 
   const handleSubmit = () => {
+    // Every product line must be fully filled in before we can record dispatch.
+    const incomplete = products
+      .map((p, i) => {
+        if (!p.productType.trim()) return `Line ${i + 1}: Product type is required`
+        if (!p.batchCode.trim()) return `Line ${i + 1}: Batch code is required for ${p.productType}`
+        if (!p.weight.trim() || !(parseFloat(p.weight) > 0)) {
+          return `Line ${i + 1}: Weight is required for ${p.productType}`
+        }
+        return null
+      })
+      .filter(Boolean) as string[]
+
+    if (incomplete.length > 0) {
+      onError(incomplete.join("; "))
+      return
+    }
+
     const errors = products
       .map((p, i) => {
-        if (!p.batchCode || !p.weight) return null
         const requested = parseFloat(p.weight)
         const available = getAvailableStock(p.batchCode)
         if (requested > available) {

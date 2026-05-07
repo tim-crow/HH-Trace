@@ -62,7 +62,7 @@ function AppContent() {
   const [records, setRecords] = React.useState<TransactionRecord[]>([])
   const [orders, setOrders] = React.useState<Order[]>([])
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
-  const [outgoingPrefill, setOutgoingPrefill] = React.useState<{ orderId: string; items: OrderItem[]; customer: string; customerAddress: string; freight?: string; freightCarrier?: string } | null>(null)
+  const [outgoingPrefill, setOutgoingPrefill] = React.useState<{ orderId: string; items: OrderItem[]; customer: string; customerAddress: string; freight?: string; freightCarrier?: string; previousStatus?: import("@/lib/types").OrderStatus } | null>(null)
   const [editingProcessingRun, setEditingProcessingRun] = React.useState<ProcessingRun | null>(null)
 
   React.useEffect(() => {
@@ -103,6 +103,32 @@ function AppContent() {
   const [itemToDelete, setItemToDelete] = React.useState<InventoryItem | null>(null)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [confirmAction, setConfirmAction] = React.useState<{ title: string; description: string; onConfirm: () => void } | null>(null)
+
+  // Auto-revert: if the user moved an order to "Packed" (which redirected to the
+  // Outgoing form) but then navigated away without submitting a dispatch record,
+  // put the order back at "In Progress".
+  const prevActiveSection = React.useRef(activeSection)
+  React.useEffect(() => {
+    const leftOutgoing = prevActiveSection.current === "outgoing" && activeSection !== "outgoing"
+    prevActiveSection.current = activeSection
+
+    if (leftOutgoing && outgoingPrefill?.orderId && outgoingPrefill.previousStatus) {
+      const orderId = outgoingPrefill.orderId
+      const prevStatus = outgoingPrefill.previousStatus
+      const now = new Date().toISOString()
+      const reverted = orders.find((o) => o.id === orderId)
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: prevStatus, lastUpdated: now } : o))
+      )
+      supabase.from('orders').update({ status: prevStatus, last_updated: now }).eq('id', orderId).then()
+      if (user && reverted) {
+        logAction(user.name, user.role, "Reverted Order Status", reverted.orderNumber, `Packed → ${prevStatus} — no outgoing dispatch was submitted`)
+        setMessage(`Order ${reverted.orderNumber} reverted to ${prevStatus} — no dispatch record was submitted.`)
+        setMessageOpen(true)
+      }
+      setOutgoingPrefill(null)
+    }
+  }, [activeSection, outgoingPrefill, orders, user])
 
   if (!user) return <LoginScreen />
 
@@ -651,6 +677,9 @@ function AppContent() {
             onAuditLog={(action, target, details) => logAction(user.name, user.role, action, target, details)}
             onMessage={showMessage}
             onPackedForOutgoing={(order) => {
+              // The order was just moved to "Packed". If the user navigates away from
+              // Outgoing without submitting a dispatch record we'll revert it back to
+              // "In Progress" (handled by the useEffect below).
               setOutgoingPrefill({
                 orderId: order.id,
                 items: (order.items || []).filter((i) => !i.fulfilled),
@@ -658,6 +687,7 @@ function AppContent() {
                 customerAddress: order.customerAddress || "",
                 freight: order.freight,
                 freightCarrier: order.freightCarrier,
+                previousStatus: "In Progress",
               })
               setActiveSection("outgoing")
             }}
