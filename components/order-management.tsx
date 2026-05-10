@@ -204,6 +204,10 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
         .notes-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 12px; font-weight: 600; }
         .notes-lines { border-top: 1px solid #e5e7eb; }
         .notes-lines .line { border-bottom: 1px solid #e5e7eb; height: 36px; }
+        .trace-fields { margin-bottom: 12px; }
+        .trace-fields .row { display: flex; align-items: flex-end; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+        .trace-fields .row label { font-size: 12px; font-weight: 600; color: #555; min-width: 130px; }
+        .trace-fields .row .fill { flex: 1; min-height: 18px; }
         .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
         @media print { body { padding: 0; } }
       </style></head><body>
@@ -229,7 +233,12 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
       }
       <div class="notes-section">
         <h3>Packing Notes / Traceability</h3>
-        <div class="notes-lines">${Array(8).fill('<div class="line"></div>').join("")}</div>
+        <div class="trace-fields">
+          <div class="row"><label>Product Batch:</label><div class="fill"></div></div>
+          <div class="row"><label>Best Before:</label><div class="fill"></div></div>
+          <div class="row"><label>Packaging Batch:</label><div class="fill"></div></div>
+        </div>
+        <div class="notes-lines">${Array(5).fill('<div class="line"></div>').join("")}</div>
       </div>
       <div class="footer"><span>Printed ${new Date().toLocaleString()}</span><span>Hemp Harvests Traceability System</span></div>
       </body></html>`)
@@ -274,7 +283,12 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
         }
         <div class="notes-section">
           <h3>Packing Notes / Traceability</h3>
-          <div class="notes-lines">${Array(8).fill('<div class="line"></div>').join("")}</div>
+          <div class="trace-fields">
+            <div class="row"><label>Product Batch:</label><div class="fill"></div></div>
+            <div class="row"><label>Best Before:</label><div class="fill"></div></div>
+            <div class="row"><label>Packaging Batch:</label><div class="fill"></div></div>
+          </div>
+          <div class="notes-lines">${Array(5).fill('<div class="line"></div>').join("")}</div>
         </div>
         <div class="footer"><span>Printed ${new Date().toLocaleString()}</span><span>Hemp Harvests Traceability System</span></div>
       </div>`
@@ -307,6 +321,10 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
         .notes-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 12px; font-weight: 600; }
         .notes-lines { border-top: 1px solid #e5e7eb; }
         .notes-lines .line { border-bottom: 1px solid #e5e7eb; height: 36px; }
+        .trace-fields { margin-bottom: 12px; }
+        .trace-fields .row { display: flex; align-items: flex-end; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+        .trace-fields .row label { font-size: 12px; font-weight: 600; color: #555; min-width: 130px; }
+        .trace-fields .row .fill { flex: 1; min-height: 18px; }
         .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
         @media print { .page { padding: 0; } }
       </style></head><body>${orderPages}</body></html>`)
