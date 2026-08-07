@@ -41,6 +41,29 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
       item.batchCode.toLowerCase().includes(filter.toLowerCase())
   )
 
+  const productTotals = React.useMemo(() => {
+    const totals = new Map<string, number>()
+    inventory.forEach((item) => {
+      totals.set(item.productType, (totals.get(item.productType) || 0) + item.quantity)
+    })
+    return totals
+  }, [inventory])
+
+  const inventoryGroups = React.useMemo(() => {
+    const groups = new Map<string, InventoryItem[]>()
+    filteredInventory.forEach((item) => {
+      const items = groups.get(item.productType) || []
+      items.push(item)
+      groups.set(item.productType, items)
+    })
+    return [...groups.entries()]
+      .sort(([productA], [productB]) => productA.localeCompare(productB))
+      .map(([productType, items]) => ({
+        productType,
+        items: items.sort((a, b) => a.batchCode.localeCompare(b.batchCode)),
+      }))
+  }, [filteredInventory])
+
   const handleEdit = (item: InventoryItem) => {
     if (!isAdmin) return
     setEditingRow(item.id)
@@ -106,7 +129,6 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product Type</TableHead>
                 <TableHead>Batch Code</TableHead>
                 <TableHead>Quantity (kg)</TableHead>
                 <TableHead>Location</TableHead>
@@ -115,71 +137,92 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredInventory.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.productType}</TableCell>
-                  <TableCell className="font-mono text-sm">{item.batchCode}</TableCell>
-                  <TableCell>
-                    {editingRow === item.id ? (
-                      <Input
-                        type="number"
-                        value={editData.quantity?.toString() || item.quantity.toString()}
-                        onChange={(e) => setEditData({ ...editData, quantity: Number(e.target.value) })}
-                        className="w-24 h-8"
-                      />
-                    ) : (
-                      `${item.quantity} kg`
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingRow === item.id ? (
-                      <div className="space-y-1">
-                        <Select value={editLocationType} onValueChange={(v) => { setEditLocationType(v); if (v === "Factory") setEditOtherLocation(""); }}>
-                          <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {LOCATIONS.map((loc) => (
-                              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {editLocationType === "Other" && (
-                          <AutocompleteInput placeholder="Location name" value={editOtherLocation} onChange={setEditOtherLocation} suggestions={savedLocations} className="h-8 w-36" />
-                        )}
+              {inventoryGroups.map(({ productType, items }) => (
+                <React.Fragment key={productType}>
+                  <TableRow className="bg-muted/60 hover:bg-muted/60">
+                    <TableCell colSpan={5} className="py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-base font-semibold">{productType}</span>
+                        <Badge variant="secondary">
+                          {(productTotals.get(productType) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg total
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {items.length} {items.length === 1 ? "batch" : "batches"}
+                        </span>
                       </div>
-                    ) : (
-                      item.location
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      {editingRow === item.id ? (
-                        <>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" onClick={handleSave}>
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleCancel}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          {isAdmin && (
+                    </TableCell>
+                  </TableRow>
+                  {items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="pl-6 font-mono text-sm">{item.batchCode}</TableCell>
+                      <TableCell>
+                        {editingRow === item.id ? (
+                          <Input
+                            type="number"
+                            value={editData.quantity?.toString() || item.quantity.toString()}
+                            onChange={(e) => setEditData({ ...editData, quantity: Number(e.target.value) })}
+                            className="w-24 h-8"
+                          />
+                        ) : (
+                          `${item.quantity} kg`
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingRow === item.id ? (
+                          <div className="space-y-1">
+                            <Select value={editLocationType} onValueChange={(v) => { setEditLocationType(v); if (v === "Factory") setEditOtherLocation(""); }}>
+                              <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {LOCATIONS.map((loc) => (
+                                  <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {editLocationType === "Other" && (
+                              <AutocompleteInput placeholder="Location name" value={editOtherLocation} onChange={setEditOtherLocation} suggestions={savedLocations} className="h-8 w-36" />
+                            )}
+                          </div>
+                        ) : (
+                          item.location
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          {editingRow === item.id ? (
                             <>
-                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(item)}>
-                                <Edit className="h-4 w-4" />
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" onClick={handleSave}>
+                                <Save className="h-4 w-4" />
                               </Button>
-                              <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => onDelete(item)}>
-                                <Trash2 className="h-4 w-4" />
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleCancel}>
+                                <X className="h-4 w-4" />
                               </Button>
                             </>
+                          ) : (
+                            isAdmin && (
+                              <>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(item)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => onDelete(item)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )
                           )}
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </React.Fragment>
+              ))}
+              {inventoryGroups.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    No inventory matches your search.
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </CardContent>
