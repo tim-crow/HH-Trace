@@ -153,9 +153,9 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
   }
 
   const getAvailableStock = React.useCallback(
-    (batchCode: string) => {
+    (productType: string, batchCode: string) => {
       return inventory
-        .filter((item) => item.batchCode === batchCode && !item.deleted)
+        .filter((item) => item.productType === productType && item.batchCode === batchCode && !item.deleted)
         .reduce((sum, item) => sum + item.quantity, 0)
     },
     [inventory]
@@ -184,7 +184,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       if (!p.batchCode || !p.weight) return null
       const requested = parseFloat(p.weight)
       if (isNaN(requested) || requested <= 0) return null
-      const available = getAvailableStock(p.batchCode)
+      const available = getAvailableStock(p.productType, p.batchCode)
       if (requested > available) {
         return `Exceeds available stock (${available} kg available)`
       }
@@ -213,7 +213,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
     const errors = products
       .map((p, i) => {
         const requested = parseFloat(p.weight)
-        const available = getAvailableStock(p.batchCode)
+        const available = getAvailableStock(p.productType, p.batchCode)
         if (requested > available) {
           return `Line ${i + 1}: Batch ${p.batchCode} requires ${requested} kg but only ${available} kg available`
         }

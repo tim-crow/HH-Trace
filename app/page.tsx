@@ -220,18 +220,63 @@ function AppContent() {
         })
       })
 
+      const inputProductTypes: Record<string, string> = {
+        "whole-seeds": "Whole Seeds",
+        "hulled-seeds": "Hulled Seeds",
+        "hemp-hearts": "Hemp Hearts",
+        lights: "Hemp Lights",
+        overs: "Overs",
+      }
+      const inputDeductions = new Map<string, number>()
       bulkProducts.forEach((product) => {
-        if (product.kg && Number.parseFloat(product.kg) > 0) {
-          setInventory((prev) =>
-            prev.map((item) =>
-              item.batchCode === product.batchCode
-                ? { ...item, quantity: Math.max(0, item.quantity - Number.parseFloat(product.kg)), lastUpdated: new Date().toISOString() }
-                : item
-            )
-          )
-          supabase.from('inventory').update({ quantity: Math.max(0, Number.parseFloat(product.kg)), last_updated: new Date().toISOString() }).eq('batch_code', product.batchCode).then()
-        }
+        const quantity = Number.parseFloat(product.kg)
+        const productType = inputProductTypes[product.productType] || product.productType
+        if (!product.batchCode || !productType || !Number.isFinite(quantity) || quantity <= 0) return
+        const key = `${productType}\u0000${product.batchCode}`
+        inputDeductions.set(key, (inputDeductions.get(key) || 0) + quantity)
       })
+
+      const inventoryUpdates = new Map<string, { quantity: number; lastUpdated: string }>()
+      let inputError = ""
+      inputDeductions.forEach((quantity, key) => {
+        const [productType, batchCode] = key.split("\u0000")
+        const matches = inventory.filter((candidate) =>
+          !candidate.deleted &&
+          candidate.productType === productType &&
+          candidate.batchCode === batchCode &&
+          candidate.location === "Factory"
+        )
+        if (matches.length > 1) {
+          inputError = `${productType} batch ${batchCode} has duplicate inventory rows. Ask an admin to consolidate them before processing.`
+          return
+        }
+        const item = matches[0]
+        if (!item) {
+          inputError = `${productType} batch ${batchCode} is no longer available at Factory.`
+          return
+        }
+        if (item.quantity < quantity) {
+          inputError = `${productType} batch ${batchCode} only has ${item.quantity}kg available; ${quantity}kg was requested.`
+          return
+        }
+
+        const lastUpdated = new Date().toISOString()
+        const remainingQuantity = item.quantity - quantity
+        inventoryUpdates.set(item.id, { quantity: remainingQuantity, lastUpdated })
+      })
+      if (inputError) {
+        showMessage(inputError)
+        return
+      }
+      inventoryUpdates.forEach((update, id) => {
+        supabase.from('inventory').update({ quantity: update.quantity, last_updated: update.lastUpdated }).eq('id', id).then()
+      })
+      setInventory((prev) =>
+        prev.map((item) => {
+          const update = inventoryUpdates.get(item.id)
+          return update ? { ...item, quantity: update.quantity, lastUpdated: update.lastUpdated } : item
+        })
+      )
 
       setInventory((prev) => [...prev, ...newInventoryItems])
       newInventoryItems.forEach((item) => {
@@ -407,6 +452,12 @@ function AppContent() {
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
   ) => {
+    const oldRun = editingProcessingRun
+    if (!oldRun || oldRun.id !== runId) {
+      showMessage("The original processing run is no longer loaded. Reopen the record and try again.")
+      return
+    }
+
     const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
     const formSnapshot = {
       staffCount: formData.staffCount,
@@ -416,91 +467,142 @@ function AppContent() {
       bulkProducts,
       finishedProducts,
     }
-    // Update the processing_runs row in place
+
+    const inputProductTypes: Record<string, string> = {
+      "whole-seeds": "Whole Seeds",
+      "hulled-seeds": "Hulled Seeds",
+      "hemp-hearts": "Hemp Hearts",
+      lights: "Hemp Lights",
+      overs: "Overs",
+    }
+    const getInputTotals = (products: BulkProduct[]) => {
+      const totals = new Map<string, number>()
+      products.forEach((product) => {
+        const quantity = Number.parseFloat(product.kg)
+        const productType = inputProductTypes[product.productType] || product.productType
+        if (!product.batchCode || !productType || !Number.isFinite(quantity) || quantity <= 0) return
+        const key = `${productType}\u0000${product.batchCode}`
+        totals.set(key, (totals.get(key) || 0) + quantity)
+      })
+      return totals
+    }
+    const getOutputTotals = (runProcessType: string, products: FinishedProduct[]) => {
+      const totals: Record<string, number> = {}
+      const add = (productType: string, value: string | undefined) => {
+        const quantity = Number.parseFloat(value || "")
+        if (Number.isFinite(quantity) && quantity > 0) {
+          totals[productType] = (totals[productType] || 0) + quantity
+        }
+      }
+      if (runProcessType === "dehulling") {
+        products.forEach((product) => {
+          add("Hemp Hearts", product.hearts)
+          add("Hemp Hulls", product.hulls)
+          add("Hemp Lights", product.lights)
+          add("Overs", product.overs)
+        })
+      } else if (runProcessType === "pressing") {
+        products.forEach((product) => {
+          add("Hemp Oil (Raw)", product.oil)
+          add(product.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake", product.mealProteinKg)
+        })
+      }
+      return totals
+    }
+
+    // Reconcile only the change between the saved cumulative form and the edited
+    // cumulative form. This lets an output such as Overs 1111 from day 1 become
+    // an input to the same run on day 2 without recreating or double-counting it.
+    const inventoryDeltas = new Map<string, number>()
+    const addDelta = (productType: string, batchCode: string, quantity: number) => {
+      if (!quantity) return
+      const key = `${productType}\u0000${batchCode}`
+      inventoryDeltas.set(key, (inventoryDeltas.get(key) || 0) + quantity)
+    }
+    getInputTotals(oldRun.bulkProducts).forEach((quantity, key) => {
+      inventoryDeltas.set(key, (inventoryDeltas.get(key) || 0) + quantity)
+    })
+    getInputTotals(bulkProducts).forEach((quantity, key) => {
+      inventoryDeltas.set(key, (inventoryDeltas.get(key) || 0) - quantity)
+    })
+
+    const oldOutputTotals = getOutputTotals(oldRun.processType, oldRun.finishedProducts)
+    const newOutputTotals = getOutputTotals(processType, finishedProducts)
+    Object.entries(oldOutputTotals).forEach(([productType, quantity]) => addDelta(productType, oldRun.batchId, -quantity))
+    Object.entries(newOutputTotals).forEach(([productType, quantity]) => addDelta(productType, formData.batchId, quantity))
+
+    const now = new Date().toISOString()
+    const inventoryUpdates = new Map<string, number>()
+    const newInventoryItems: InventoryItem[] = []
+    let inventoryError = ""
+    inventoryDeltas.forEach((delta, key) => {
+      if (Math.abs(delta) < 0.000001) return
+      const [productType, batchCode] = key.split("\u0000")
+      const matches = inventory.filter((candidate) =>
+        !candidate.deleted &&
+        candidate.productType === productType &&
+        candidate.batchCode === batchCode &&
+        candidate.location === "Factory"
+      )
+      if (matches.length > 1) {
+        inventoryError = `${productType} batch ${batchCode} has duplicate inventory rows. Ask an admin to consolidate them before updating this run.`
+        return
+      }
+      const item = matches[0]
+
+      if (!item) {
+        if (delta < 0) {
+          inventoryError = `${productType} batch ${batchCode} is no longer available at Factory.`
+          return
+        }
+        newInventoryItems.push({
+          id: generateId("INV"),
+          productType,
+          batchCode,
+          quantity: delta,
+          location: "Factory",
+          lastUpdated: now,
+        })
+        return
+      }
+
+      const revisedQuantity = item.quantity + delta
+      if (revisedQuantity < -0.000001) {
+        inventoryError = `${productType} batch ${batchCode} only has ${item.quantity}kg available; this update needs ${Math.abs(delta)}kg.`
+        return
+      }
+      inventoryUpdates.set(item.id, Math.max(0, revisedQuantity))
+    })
+
+    if (inventoryError) {
+      showMessage(inventoryError)
+      return
+    }
+
+    inventoryUpdates.forEach((quantity, id) => {
+      supabase.from('inventory').update({ quantity, last_updated: now }).eq('id', id).then()
+    })
+    newInventoryItems.forEach((item) => {
+      supabase.from('inventory').insert({
+        id: item.id, product_type: item.productType, batch_code: item.batchCode,
+        quantity: item.quantity, location: item.location, last_updated: item.lastUpdated,
+      }).then()
+    })
+    setInventory((prev) => [
+      ...prev.map((item) => inventoryUpdates.has(item.id)
+        ? { ...item, quantity: inventoryUpdates.get(item.id)!, lastUpdated: now }
+        : item),
+      ...newInventoryItems,
+    ])
+
     supabase.from('processing_runs').update({
       date: formData.date,
       batch_id: formData.batchId,
       process_type: processType,
       total_input_kg: totalKg,
+      outputs: Object.entries(newOutputTotals).map(([productType, kg]) => ({ productType, kg })),
       form_data: formSnapshot,
     }).eq('id', runId).then()
-
-    // Rebuild this run's finished-product inventory from the edited form.
-    // All yields aggregate per product type under the single batch ID
-    // (e.g. all hemp hearts → batchCode "11226"). Existing inventory rows
-    // tied to this batch (either "11226" or legacy "11226-H1" / "11226-OIL1"
-    // suffixed codes) are updated, created, or removed to match the form.
-    const batchId = formData.batchId
-    const newTotals: Record<string, number> = {}
-    const addTotal = (productType: string, value: string | undefined) => {
-      const n = Number.parseFloat(value || "")
-      if (Number.isFinite(n) && n > 0) {
-        newTotals[productType] = (newTotals[productType] || 0) + n
-      }
-    }
-    if (processType === "dehulling") {
-      finishedProducts.forEach((p) => {
-        addTotal("Hemp Hearts", p.hearts)
-        addTotal("Hemp Hulls", p.hulls)
-        addTotal("Hemp Lights", p.lights)
-        addTotal("Overs", p.overs)
-      })
-    } else if (processType === "pressing") {
-      finishedProducts.forEach((p) => {
-        addTotal("Hemp Oil (Raw)", p.oil)
-        if (p.mealProteinKg && Number.parseFloat(p.mealProteinKg) > 0) {
-          addTotal(p.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake", p.mealProteinKg)
-        }
-      })
-    }
-
-    const now = new Date().toISOString()
-    const linkedItems = inventory.filter(
-      (i) => !i.deleted && (i.batchCode === batchId || i.batchCode.startsWith(`${batchId}-`))
-    )
-    let nextInventory = [...inventory]
-    const matchedIds = new Set<string>()
-
-    Object.entries(newTotals).forEach(([productType, qty]) => {
-      // Prefer a row already on the bare batch ID; fall back to any linked row of this product type.
-      const match =
-        linkedItems.find((i) => i.productType === productType && i.batchCode === batchId) ||
-        linkedItems.find((i) => i.productType === productType && !matchedIds.has(i.id))
-      if (match) {
-        matchedIds.add(match.id)
-        nextInventory = nextInventory.map((i) =>
-          i.id === match.id ? { ...i, batchCode: batchId, quantity: qty, lastUpdated: now } : i
-        )
-        supabase.from('inventory')
-          .update({ batch_code: batchId, quantity: qty, last_updated: now })
-          .eq('id', match.id).then()
-      } else {
-        const newItem: InventoryItem = {
-          id: generateId("INV"),
-          productType,
-          batchCode: batchId,
-          quantity: qty,
-          location: "Factory",
-          lastUpdated: now,
-        }
-        nextInventory.push(newItem)
-        supabase.from('inventory').insert({
-          id: newItem.id, product_type: newItem.productType, batch_code: newItem.batchCode,
-          quantity: newItem.quantity, location: newItem.location, last_updated: newItem.lastUpdated,
-        }).then()
-      }
-    })
-
-    // Any leftover linked rows (extra suffixed entries, or product types
-    // that have been zeroed out in the edited form) are removed.
-    linkedItems.forEach((item) => {
-      if (!matchedIds.has(item.id)) {
-        nextInventory = nextInventory.filter((i) => i.id !== item.id)
-        supabase.from('inventory').delete().eq('id', item.id).then()
-      }
-    })
-
-    setInventory(nextInventory)
 
     // Update the linked records row to keep summary in sync
     const linkedRecord = records.find((r) => r.processingRunId === runId)
@@ -608,23 +710,45 @@ function AppContent() {
           orders={orders}
           prefill={outgoingPrefill}
           onSubmit={(products, customerName, customerAddress, freight, fromOrderId) => {
-            // Deduct each product from inventory
+            // Deduct the exact product + batch row. Multiple finished products can
+            // share a processing batch code, so batch code alone is not unique.
+            const outgoingTotals = new Map<string, { productType: string; batchCode: string; quantity: number }>()
             products.forEach((p) => {
-              setInventory((prev) =>
-                prev.map((item) =>
-                  item.batchCode === p.batchCode
-                    ? { ...item, quantity: Math.max(0, item.quantity - p.weight), lastUpdated: new Date().toISOString() }
-                    : item
-                )
-              )
-              const current = inventory.find((i) => i.batchCode === p.batchCode)
-              if (current) {
-                supabase.from('inventory').update({
-                  quantity: Math.max(0, current.quantity - p.weight),
-                  last_updated: new Date().toISOString(),
-                }).eq('batch_code', p.batchCode).then()
-              }
+              const key = `${p.productType}\u0000${p.batchCode}`
+              const existing = outgoingTotals.get(key)
+              outgoingTotals.set(key, {
+                productType: p.productType,
+                batchCode: p.batchCode,
+                quantity: (existing?.quantity || 0) + p.weight,
+              })
             })
+            const now = new Date().toISOString()
+            const outgoingUpdates = new Map<string, number>()
+            for (const outgoing of outgoingTotals.values()) {
+              const matches = inventory.filter((candidate) =>
+                !candidate.deleted &&
+                candidate.productType === outgoing.productType &&
+                candidate.batchCode === outgoing.batchCode
+              )
+              if (matches.length > 1) {
+                showMessage(`${outgoing.productType} batch ${outgoing.batchCode} has duplicate inventory rows. Ask an admin to consolidate them before dispatch.`)
+                return
+              }
+              const item = matches[0]
+              if (!item || item.quantity < outgoing.quantity) {
+                showMessage(`${outgoing.productType} batch ${outgoing.batchCode} does not have enough stock for this dispatch.`)
+                return
+              }
+              outgoingUpdates.set(item.id, item.quantity - outgoing.quantity)
+            }
+            outgoingUpdates.forEach((quantity, id) => {
+              supabase.from('inventory').update({ quantity, last_updated: now }).eq('id', id).then()
+            })
+            setInventory((prev) => prev.map((item) =>
+              outgoingUpdates.has(item.id)
+                ? { ...item, quantity: outgoingUpdates.get(item.id)!, lastUpdated: now }
+                : item
+            ))
             // Create transaction records
             products.forEach((p) => {
               const newRecord: TransactionRecord = {
