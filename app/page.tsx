@@ -46,6 +46,86 @@ import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
 import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, ProcessingRun } from "@/lib/types"
 
+interface PackingSlipData {
+  number: string
+  date: string
+  orderNumber?: string
+  customer: string
+  address: string
+  products: { productType: string; batchCode: string; weight: number }[]
+}
+
+function escapePackingSlipValue(value: string | number) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
+}
+
+function openPackingSlip(data: PackingSlipData) {
+  const win = window.open("", "_blank")
+  if (!win) return false
+
+  const productRows = data.products.map((product) => `
+    <tr>
+      <td>${escapePackingSlipValue(product.productType)}</td>
+      <td class="batch">${escapePackingSlipValue(product.batchCode)}</td>
+      <td class="quantity">${escapePackingSlipValue(product.weight)} kg</td>
+    </tr>
+  `).join("")
+
+  win.document.write(`<!DOCTYPE html><html><head><title>Packing Slip ${escapePackingSlipValue(data.number)}</title>
+    <style>
+      * { box-sizing: border-box; }
+      @page { size: A4; margin: 20mm; }
+      body { margin: 0; padding: 40px; color: #1a1a1a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .toolbar { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+      .toolbar button { border: 0; border-radius: 6px; background: #16a34a; color: white; padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #16a34a; padding-bottom: 18px; margin-bottom: 30px; }
+      .brand { color: #16a34a; font-size: 24px; font-weight: 700; }
+      .brand span { display: block; color: #555; font-size: 14px; font-weight: 400; margin-top: 3px; }
+      .document-title { text-align: right; }
+      .document-title h1 { margin: 0 0 6px; font-size: 24px; }
+      .document-title p { margin: 2px 0; color: #555; font-size: 13px; }
+      .details { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+      .field label { display: block; color: #777; font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 5px; }
+      .field p { margin: 0; font-size: 15px; font-weight: 500; white-space: pre-line; }
+      .address { grid-column: 1 / -1; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; padding: 15px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      th { color: #777; font-size: 11px; font-weight: 600; letter-spacing: .5px; text-align: left; text-transform: uppercase; border-bottom: 2px solid #d1d5db; padding: 10px 12px; }
+      td { border-bottom: 1px solid #e5e7eb; padding: 12px; font-size: 14px; }
+      .batch { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .quantity { text-align: right; }
+      th:last-child { text-align: right; }
+      .footer { border-top: 1px solid #e5e7eb; color: #aaa; font-size: 11px; margin-top: 40px; padding-top: 14px; text-align: center; }
+      @media print { body { padding: 0; } .toolbar { display: none; } }
+    </style></head><body>
+    <div class="toolbar"><button onclick="window.print()">Print Packing Slip</button></div>
+    <div class="header">
+      <div class="brand">Hemp Harvests<span>Traceability System</span></div>
+      <div class="document-title">
+        <h1>Packing Slip</h1>
+        <p>${escapePackingSlipValue(data.number)}</p>
+        <p>${escapePackingSlipValue(data.date)}</p>
+      </div>
+    </div>
+    <div class="details">
+      ${data.orderNumber ? `<div class="field"><label>Order Number</label><p>${escapePackingSlipValue(data.orderNumber)}</p></div>` : ""}
+      <div class="field"><label>Customer</label><p>${escapePackingSlipValue(data.customer || "—")}</p></div>
+      <div class="field address"><label>Delivery Address</label><p>${escapePackingSlipValue(data.address || "—")}</p></div>
+    </div>
+    <table>
+      <thead><tr><th>Product</th><th>Batch Code</th><th>Quantity</th></tr></thead>
+      <tbody>${productRows}</tbody>
+    </table>
+    <div class="footer">Hemp Harvests Packing Slip</div>
+  </body></html>`)
+  win.document.close()
+  return true
+}
+
 export default function HempTraceabilityDashboard() {
   return (
     <AuthProvider>
@@ -709,7 +789,7 @@ function AppContent() {
           inventory={activeInventory}
           orders={orders}
           prefill={outgoingPrefill}
-          onSubmit={(products, customerName, customerAddress, freight, fromOrderId) => {
+          onSubmit={(products, customerName, customerAddress, freight, dispatchDate, fromOrderId) => {
             // Deduct the exact product + batch row. Multiple finished products can
             // share a processing batch code, so batch code alone is not unique.
             const outgoingTotals = new Map<string, { productType: string; batchCode: string; quantity: number }>()
@@ -754,7 +834,7 @@ function AppContent() {
               const newRecord: TransactionRecord = {
                 id: generateId("REC"),
                 type: "Outgoing",
-                date: new Date().toISOString().split("T")[0],
+                date: dispatchDate,
                 productType: p.productType,
                 batchCode: p.batchCode,
                 quantity: p.weight,
@@ -771,6 +851,7 @@ function AppContent() {
             })
             // Mark fulfilled items on the linked order (from prefill or dropdown)
             const linkedOrderId = outgoingPrefill?.orderId || fromOrderId
+            const linkedOrder = linkedOrderId ? orders.find((order) => order.id === linkedOrderId) : undefined
             if (linkedOrderId) {
               const fulfilledTypes = new Set(products.map((p) => p.productType))
               const updateOrder = (o: Order): Order => {
@@ -787,7 +868,18 @@ function AppContent() {
             }
             const totalKg = products.reduce((s, p) => s + p.weight, 0)
             logAction(user.name, user.role, "Created Outgoing", "Dispatch", `${totalKg} kg to ${customerName} via ${freight || "N/A"}: ${products.map(p => `${p.productType} ${p.batchCode} ${p.weight}kg`).join(", ")}`)
-            showMessage("Outgoing record saved! Inventory updated.")
+            const packingSlipOpened = openPackingSlip({
+              number: `PS-${dispatchDate.replaceAll("-", "")}-${Date.now().toString().slice(-6)}`,
+              date: dispatchDate,
+              orderNumber: linkedOrder?.orderNumber,
+              customer: customerName,
+              address: customerAddress,
+              products,
+            })
+            showMessage(packingSlipOpened
+              ? "Outgoing record saved and inventory updated. The packing slip is ready to print in the new window."
+              : "Outgoing record saved and inventory updated, but the packing slip window was blocked. Do not submit the dispatch again; allow pop-ups before the next dispatch."
+            )
           }}
           onError={showMessage}
         />

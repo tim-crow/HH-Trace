@@ -24,7 +24,7 @@ interface ProductLine {
 interface OutgoingFormProps {
   inventory: InventoryItem[]
   orders: Order[]
-  onSubmit: (products: {productType: string; batchCode: string; weight: number}[], customerName: string, customerAddress: string, freight: string, fromOrderId?: string) => void
+  onSubmit: (products: {productType: string; batchCode: string; weight: number}[], customerName: string, customerAddress: string, freight: string, dispatchDate: string, fromOrderId?: string) => void
   onError: (msg: string) => void
   prefill?: {
     orderId: string
@@ -40,6 +40,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
   const [products, setProducts] = React.useState<ProductLine[]>([
     { productType: "", batchCode: "", weight: "", units: "" },
   ])
+  const [dispatchDate, setDispatchDate] = React.useState(() => new Date().toISOString().split("T")[0])
   const [customerName, setCustomerName] = React.useState("")
   const [customerAddress, setCustomerAddress] = React.useState("")
   const [freight, setFreight] = React.useState("")
@@ -209,6 +210,18 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       onError(incomplete.join("; "))
       return
     }
+    if (!dispatchDate) {
+      onError("Date of dispatch is required")
+      return
+    }
+    if (!customerName.trim()) {
+      onError("Customer name is required")
+      return
+    }
+    if (!customerAddress.trim()) {
+      onError("Customer address is required for the packing slip")
+      return
+    }
 
     const errors = products
       .map((p, i) => {
@@ -258,6 +271,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       customerName,
       customerAddress,
       formattedFreight,
+      dispatchDate,
       resolvedOrderId
     )
   }
@@ -300,7 +314,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Date of Dispatch</Label>
-              <Input type="date" className="max-w-xs" />
+              <Input type="date" className="max-w-xs" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} />
             </div>
             {openOrders.length > 0 && (
               <div className="space-y-2">
