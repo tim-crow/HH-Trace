@@ -20,6 +20,7 @@ interface ProcessingFormsProps {
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
+    onCommitted?: () => void,
   ) => void
   onError: (message: string) => void
   onAdditionalSubmit: () => void
@@ -59,6 +60,12 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
   const [pressNotes, setPressNotes] = React.useState("")
   const [pressOilType, setPressOilType] = React.useState("")
 
+  const [combineDate, setCombineDate] = React.useState("")
+  const [combineProductType, setCombineProductType] = React.useState("")
+  const [combineBatch, setCombineBatch] = React.useState("")
+  const [combineNotes, setCombineNotes] = React.useState("")
+  const [combineSources, setCombineSources] = React.useState<BulkProduct[]>([firstBulk(), { ...emptyBulk(), bag: "2" }])
+
   const [activeTab, setActiveTab] = React.useState("dehulling")
   const isEditing = !!editRun
 
@@ -84,8 +91,22 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       setPressOilType(editRun.oilPressType || "")
       setPressBulk(editRun.bulkProducts.length ? editRun.bulkProducts.map((p) => ({ ...p })) : [emptyBulk()])
       setPressFinished(editRun.finishedProducts.length ? editRun.finishedProducts.map((p) => ({ ...p })) : [emptyFinished()])
+    } else if (editRun.processType === "combining") {
+      setActiveTab("combining")
+      setCombineDate(editRun.date)
+      setCombineBatch(editRun.batchId)
+      setCombineNotes(editRun.notes)
+      setCombineProductType(editRun.bulkProducts[0]?.productType || "")
+      setCombineSources(editRun.bulkProducts.length
+        ? editRun.bulkProducts.map((product) => ({ ...product }))
+        : [firstBulk(), { ...emptyBulk(), bag: "2" }])
     }
   }, [editRun])
+
+  const combinationProductTypes = React.useMemo(() =>
+    [...new Set(inventory.filter((item) => item.quantity > 0 && item.location === "Factory").map((item) => item.productType))]
+      .sort((a, b) => a.localeCompare(b)),
+  [inventory])
 
   const getAvailableBatches = (productType: string): AvailableBatch[] => {
     if (!productType) return []
@@ -140,6 +161,63 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       setPressBulk([firstBulk()]); setPressFinished([firstFinished()])
     }
   }
+  const handleCombiningSubmit = () => {
+    if (!combineDate || !combineProductType || !combineBatch) {
+      onError("Please enter the date, product type and new outgoing batch code.")
+      return
+    }
+    const invalidSource = combineSources.find((source) => {
+      const hasBatch = Boolean(source.batchCode)
+      const hasQuantity = Boolean(source.kg.trim())
+      const quantity = Number.parseFloat(source.kg)
+      return (hasBatch || hasQuantity) && (!hasBatch || !Number.isFinite(quantity) || quantity <= 0)
+    })
+    if (invalidSource) {
+      onError("Every source row must have both a batch code and a quantity greater than zero.")
+      return
+    }
+    const completedSources = combineSources.filter((source) => source.batchCode && Number.parseFloat(source.kg) > 0)
+    if (new Set(completedSources.map((source) => source.batchCode)).size < 2) {
+      onError("Select at least two different source batches to combine.")
+      return
+    }
+    if (new Set(completedSources.map((source) => source.batchCode)).size !== completedSources.length) {
+      onError("Each source batch can only be selected once. Combine repeated quantities into one row.")
+      return
+    }
+    if (isEditing && editRun?.processType === "combining" && combineBatch !== editRun.batchId) {
+      onError("The outgoing batch code cannot be changed after a combination is created. Reverse and recreate the combination if a different code is required.")
+      return
+    }
+    if (
+      inventory.some((item) => !item.deleted && item.batchCode === combineBatch) &&
+      !(isEditing && editRun?.processType === "combining" && editRun.batchId === combineBatch)
+    ) {
+      onError(`Batch code ${combineBatch} already exists. Enter a unique outgoing batch code.`)
+      return
+    }
+
+    const sources = completedSources.map((source, index) => ({
+      ...source,
+      bag: String(index + 1),
+      productType: combineProductType,
+    }))
+    const formData = {
+      date: combineDate,
+      batchId: combineBatch,
+      staffCount: "",
+      staffNames: "",
+      notes: combineNotes,
+    }
+    if (isEditing && editRun && onUpdate) {
+      onUpdate(editRun.id, formData, "combining", sources, [])
+    } else {
+      onSubmit(formData, "combining", sources, [], () => {
+        setCombineDate(""); setCombineProductType(""); setCombineBatch(""); setCombineNotes("")
+        setCombineSources([firstBulk(), { ...emptyBulk(), bag: "2" }])
+      })
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -176,6 +254,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
         <TabsList>
           <TabsTrigger value="dehulling" disabled={isEditing && editRun?.processType !== "dehulling"}>Dehulling</TabsTrigger>
           <TabsTrigger value="pressing" disabled={isEditing && editRun?.processType !== "pressing"}>Pressing</TabsTrigger>
+          <TabsTrigger value="combining" disabled={isEditing && editRun?.processType !== "combining"}>Combine Batches</TabsTrigger>
           <TabsTrigger value="additional" disabled={isEditing}>Additional</TabsTrigger>
         </TabsList>
 
@@ -299,6 +378,132 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
               <div className="flex items-center gap-2"><Checkbox /><label className="text-sm">COA meets spec</label></div>
               <Button onClick={handlePressingSubmit}>
                 {isEditing ? "Update Pressing Record" : "Submit Pressing Record"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="combining">
+          <Card>
+            <CardHeader>
+              <CardTitle>Batch Combination Form</CardTitle>
+              <CardDescription>Combine quantities from two or more batches of the same product into one outgoing batch code</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Date *</Label>
+                  <Input type="date" value={combineDate} onChange={(event) => setCombineDate(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Product Type *</Label>
+                  <Select
+                    value={combineProductType}
+                    onValueChange={(value) => {
+                      setCombineProductType(value)
+                      setCombineSources((sources) => sources.map((source) => ({ ...source, productType: value, batchCode: "", kg: "" })))
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                    <SelectContent>
+                      {combinationProductTypes.map((productType) => (
+                        <SelectItem key={productType} value={productType}>{productType}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>New Outgoing Batch Code *</Label>
+                  <Input
+                    placeholder="Enter unique batch code"
+                    value={combineBatch}
+                    onChange={(event) => setCombineBatch(event.target.value)}
+                    disabled={isEditing}
+                  />
+                  {isEditing && <p className="text-xs text-muted-foreground">The outgoing batch code is fixed after creation.</p>}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">Source Batches</h4>
+                  <span className="text-sm text-muted-foreground">
+                    Total: {combineSources.reduce((sum, source) =>
+                      source.batchCode && Number.parseFloat(source.kg) > 0 ? sum + Number.parseFloat(source.kg) : sum,
+                    0).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                  </span>
+                </div>
+                {combineSources.map((source, index) => {
+                  const availableBatches = getAvailableBatches(combineProductType)
+                    .filter((batch) => batch.batchCode !== combineBatch)
+                  return (
+                    <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-3 rounded-lg border bg-muted/50 p-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Source Batch *</Label>
+                        <Select
+                          value={source.batchCode}
+                          onValueChange={(value) => setCombineSources((sources) => sources.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, productType: combineProductType, batchCode: value } : item
+                          ))}
+                          disabled={!combineProductType}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
+                          <SelectContent>
+                            {availableBatches.map((batch) => (
+                              <SelectItem key={batch.batchCode} value={batch.batchCode}>{batch.batchCode} ({batch.quantity} kg available)</SelectItem>
+                            ))}
+                            {source.batchCode && !availableBatches.some((batch) => batch.batchCode === source.batchCode) && (
+                              <SelectItem value={source.batchCode}>{source.batchCode} (saved)</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Quantity Used (kg) *</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={source.kg}
+                          onChange={(event) => setCombineSources((sources) => sources.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, productType: combineProductType, kg: event.target.value } : item
+                          ))}
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 text-destructive"
+                          disabled={combineSources.length <= 2}
+                          onClick={() => setCombineSources((sources) => sources.filter((_, itemIndex) => itemIndex !== index))}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCombineSources((sources) => [...sources, { ...emptyBulk(), productType: combineProductType, bag: nextBag(sources) }])}
+                >
+                  <Plus className="mr-1 h-4 w-4" />Add Source Batch
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reason / Notes</Label>
+                <Textarea
+                  placeholder="e.g. Customer requires one outgoing batch code"
+                  value={combineNotes}
+                  onChange={(event) => setCombineNotes(event.target.value)}
+                />
+              </div>
+
+              <Button onClick={handleCombiningSubmit}>
+                {isEditing ? "Update Batch Combination" : "Create Combined Batch"}
               </Button>
             </CardContent>
           </Card>

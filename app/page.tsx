@@ -257,7 +257,8 @@ function AppContent() {
     formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string },
     processType: string,
     bulkProducts: BulkProduct[],
-    finishedProducts: FinishedProduct[]
+    finishedProducts: FinishedProduct[],
+    onCommitted?: () => void,
   ) => {
     const doProcess = () => {
       const newInventoryItems: InventoryItem[] = []
@@ -287,6 +288,15 @@ function AppContent() {
             addTotal(productType, product.mealProteinKg)
           }
         })
+      } else if (processType === "combining") {
+        const productType = bulkProducts[0]?.productType
+        const quantity = bulkProducts.reduce((sum, product) => sum + (Number.parseFloat(product.kg) || 0), 0)
+        if (productType && quantity > 0) totals[productType] = quantity
+      }
+
+      if (processType === "combining" && inventory.some((item) => item.batchCode === formData.batchId)) {
+        showMessage(`Batch code ${formData.batchId} already exists. Enter a unique outgoing batch code.`)
+        return
       }
 
       Object.entries(totals).forEach(([productType, quantity]) => {
@@ -369,10 +379,10 @@ function AppContent() {
         id: generateId("REC"),
         type: "Processing",
         date: formData.date,
-        productType: `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
+        productType: processType === "combining" ? "Batch Combination" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
         batchCode: formData.batchId,
         quantity: totalKg,
-        processor: `${formData.staffNames} (${formData.staffCount} staff)`,
+        processor: processType === "combining" ? user.name : `${formData.staffNames} (${formData.staffCount} staff)`,
         status: "Completed",
         processingRunId: runId,
       }
@@ -398,13 +408,16 @@ function AppContent() {
         form_data: formSnapshot,
       }).then()
       logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${totalKg} kg input, ${newInventoryItems.length} outputs created`)
-      showMessage(`${processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
+      showMessage(processType === "combining" ? "Combined batch created successfully!" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
+      onCommitted?.()
     }
 
     const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
     setConfirmAction({
-      title: `Confirm ${processType.charAt(0).toUpperCase() + processType.slice(1)} Record`,
-      description: `This will deduct ${totalKg} kg from input batches and create finished product inventory items. This action is recorded in the audit log.`,
+      title: processType === "combining" ? "Confirm Batch Combination" : `Confirm ${processType.charAt(0).toUpperCase() + processType.slice(1)} Record`,
+      description: processType === "combining"
+        ? `This will deduct ${totalKg} kg from the selected source batches and create batch ${formData.batchId}. The source genealogy will be saved.`
+        : `This will deduct ${totalKg} kg from input batches and create finished product inventory items. This action is recorded in the audit log.`,
       onConfirm: doProcess,
     })
   }
@@ -566,7 +579,7 @@ function AppContent() {
       })
       return totals
     }
-    const getOutputTotals = (runProcessType: string, products: FinishedProduct[]) => {
+    const getOutputTotals = (runProcessType: string, products: FinishedProduct[], sourceProducts: BulkProduct[]) => {
       const totals: Record<string, number> = {}
       const add = (productType: string, value: string | undefined) => {
         const quantity = Number.parseFloat(value || "")
@@ -586,6 +599,10 @@ function AppContent() {
           add("Hemp Oil (Raw)", product.oil)
           add(product.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake", product.mealProteinKg)
         })
+      } else if (runProcessType === "combining") {
+        const productType = sourceProducts[0]?.productType
+        const quantity = sourceProducts.reduce((sum, product) => sum + (Number.parseFloat(product.kg) || 0), 0)
+        if (productType && quantity > 0) totals[productType] = quantity
       }
       return totals
     }
@@ -606,8 +623,8 @@ function AppContent() {
       inventoryDeltas.set(key, (inventoryDeltas.get(key) || 0) - quantity)
     })
 
-    const oldOutputTotals = getOutputTotals(oldRun.processType, oldRun.finishedProducts)
-    const newOutputTotals = getOutputTotals(processType, finishedProducts)
+    const oldOutputTotals = getOutputTotals(oldRun.processType, oldRun.finishedProducts, oldRun.bulkProducts)
+    const newOutputTotals = getOutputTotals(processType, finishedProducts, bulkProducts)
     Object.entries(oldOutputTotals).forEach(([productType, quantity]) => addDelta(productType, oldRun.batchId, -quantity))
     Object.entries(newOutputTotals).forEach(([productType, quantity]) => addDelta(productType, formData.batchId, quantity))
 
@@ -692,8 +709,8 @@ function AppContent() {
         date: formData.date,
         batchCode: formData.batchId,
         quantity: totalKg,
-        productType: `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
-        processor: `${formData.staffNames} (${formData.staffCount} staff)`,
+        productType: processType === "combining" ? "Batch Combination" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
+        processor: processType === "combining" ? user.name : `${formData.staffNames} (${formData.staffCount} staff)`,
       }
       setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r)))
       supabase.from('records').update({
@@ -706,7 +723,7 @@ function AppContent() {
     }
 
     logAction(user.name, user.role, "Edited Processing", formData.batchId, `Updated ${processType} run — ${totalKg} kg total, ${bulkProducts.length} bulk lines, ${finishedProducts.length} finished lines`)
-    showMessage(`${processType.charAt(0).toUpperCase() + processType.slice(1)} record updated!`)
+    showMessage(processType === "combining" ? "Batch combination updated!" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} record updated!`)
     setEditingProcessingRun(null)
     setActiveSection("records")
   }

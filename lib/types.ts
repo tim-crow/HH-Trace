@@ -39,7 +39,7 @@ export interface ProcessingRun {
   id: string
   date: string
   batchId: string
-  processType: "dehulling" | "pressing"
+  processType: "dehulling" | "pressing" | "combining"
   staffCount: string
   staffNames: string
   notes: string
@@ -115,5 +115,4 @@ export interface Order {
   lastUpdated: string
   deleted?: boolean
 }
-
 
