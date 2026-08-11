@@ -19,6 +19,7 @@ import {
 import { Edit, Search, Lock, Trash2, RotateCcw } from "lucide-react"
 import { HEMP_PRODUCTS, FINISHED_GOODS } from "@/lib/constants"
 import type { TransactionRecord } from "@/lib/types"
+import { formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface RecordsTableProps {
   records: TransactionRecord[]
@@ -141,7 +142,7 @@ export function RecordsTable({ records, isAdmin, onRecordUpdate, onOpenProcessin
                   </TableCell>
                   <TableCell className="font-medium">{record.productType}</TableCell>
                   <TableCell className="font-mono text-sm">{record.batchCode}</TableCell>
-                  <TableCell>{record.quantity} kg</TableCell>
+                  <TableCell>{formatQuantity(record.quantity)} kg</TableCell>
                   <TableCell className="text-muted-foreground">{record.supplier || record.processor || record.customer || "—"}</TableCell>
                   <TableCell>
                     <Badge variant={record.status === "Completed" ? "success" : "warning"}>
@@ -174,7 +175,7 @@ export function RecordsTable({ records, isAdmin, onRecordUpdate, onOpenProcessin
                                   if (record.type === "Processing" && onOpenProcessingForm) {
                                     onOpenProcessingForm(record)
                                   } else {
-                                    setEditRecord({ ...record })
+                                    setEditRecord({ ...record, quantity: roundQuantity(record.quantity) })
                                   }
                                 }}
                                 title={
@@ -318,7 +319,7 @@ function ProcessingEditForm({
           <Input
             type="number"
             min={0}
-            step="0.01"
+            step="0.1"
             value={record.quantity}
             onChange={(e) => setRecord({ ...record, quantity: parseFloat(e.target.value) || 0 })}
           />
@@ -395,7 +396,7 @@ function ReceivalEditForm({
           <Input
             type="number"
             min={0}
-            step="0.01"
+            step="0.1"
             value={record.quantity}
             onChange={(e) => setRecord({ ...record, quantity: parseFloat(e.target.value) || 0 })}
           />
@@ -471,7 +472,7 @@ function OutgoingEditForm({
           <Input
             type="number"
             min={0}
-            step="0.01"
+            step="0.1"
             value={record.quantity}
             onChange={(e) => setRecord({ ...record, quantity: parseFloat(e.target.value) || 0 })}
           />
@@ -530,7 +531,7 @@ function DeletionEditForm({
           <Input
             type="number"
             min={0}
-            step="0.01"
+            step="0.1"
             value={record.quantity}
             onChange={(e) => setRecord({ ...record, quantity: parseFloat(e.target.value) || 0 })}
           />

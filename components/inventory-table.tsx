@@ -12,6 +12,7 @@ import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { LOCATIONS } from "@/lib/constants"
 import { getOtherLocations, saveOtherLocation } from "@/lib/remembered-entries"
 import type { InventoryItem } from "@/lib/types"
+import { formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface InventoryTableProps {
   inventory: InventoryItem[]
@@ -67,7 +68,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
   const handleEdit = (item: InventoryItem) => {
     if (!isAdmin) return
     setEditingRow(item.id)
-    setEditData(item)
+    setEditData({ ...item, quantity: roundQuantity(item.quantity) })
     if (item.location === "Factory") {
       setEditLocationType("Factory")
       setEditOtherLocation("")
@@ -84,7 +85,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
         saveOtherLocation(editOtherLocation)
         setSavedLocations(getOtherLocations())
       }
-      onSave(editingRow, { ...editData, location: finalLocation })
+      onSave(editingRow, { ...editData, quantity: editData.quantity === undefined ? undefined : roundQuantity(editData.quantity), location: finalLocation })
       setEditingRow(null)
       setEditData({})
     }
@@ -144,7 +145,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
                       <div className="flex items-center gap-3">
                         <span className="text-base font-semibold">{productType}</span>
                         <Badge variant="secondary">
-                          {(productTotals.get(productType) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg total
+                          {formatQuantity(productTotals.get(productType) || 0)} kg total
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           {items.length} {items.length === 1 ? "batch" : "batches"}
@@ -160,11 +161,12 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
                           <Input
                             type="number"
                             value={editData.quantity?.toString() || item.quantity.toString()}
+                            step="0.1"
                             onChange={(e) => setEditData({ ...editData, quantity: Number(e.target.value) })}
                             className="w-24 h-8"
                           />
                         ) : (
-                          `${item.quantity} kg`
+                          `${formatQuantity(item.quantity)} kg`
                         )}
                       </TableCell>
                       <TableCell>
@@ -255,7 +257,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
                   <TableRow key={item.id} className="opacity-60">
                     <TableCell>{item.productType}</TableCell>
                     <TableCell className="font-mono text-sm">{item.batchCode}</TableCell>
-                    <TableCell>{item.quantity} kg</TableCell>
+                    <TableCell>{formatQuantity(item.quantity)} kg</TableCell>
                     <TableCell>{item.deletedBy || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {item.deletedAt ? new Date(item.deletedAt).toLocaleString() : "—"}

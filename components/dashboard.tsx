@@ -16,7 +16,7 @@ import {
   Plus,
   Leaf,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatQuantity } from "@/lib/utils"
 import { getAuditLog } from "@/lib/audit-log"
 import type { InventoryItem, Order, OrderStatus } from "@/lib/types"
 
@@ -65,7 +65,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
       })
     totals.forEach((total, productType) => {
       if (total < 50) {
-        alerts.push({ label: productType, sublabel: `${total} kg total`, value: total, unit: "kg" })
+        alerts.push({ label: productType, sublabel: `${formatQuantity(total)} kg total`, value: total, unit: "kg" })
       }
     })
 
@@ -173,7 +173,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
         />
         <StatCard
           label="Total Inventory"
-          value={`${totalKg.toLocaleString()} kg`}
+          value={`${formatQuantity(totalKg)} kg`}
           description={`${inventory.length} active batches`}
           icon={Warehouse}
           onClick={() => onNavigate("inventory")}
@@ -267,7 +267,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
                         <p className="text-sm font-medium">{alert.label}</p>
                         <p className="text-xs text-muted-foreground">{alert.sublabel}</p>
                       </div>
-                      <Badge variant="warning" className="text-xs">{alert.value} {alert.unit}</Badge>
+                      <Badge variant="warning" className="text-xs">{alert.unit === "kg" ? formatQuantity(alert.value) : alert.value} {alert.unit}</Badge>
                     </CardContent>
                   </Card>
                 ))}

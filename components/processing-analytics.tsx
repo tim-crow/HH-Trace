@@ -11,7 +11,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts"
 import { supabase } from "@/lib/supabase"
-import { cn } from "@/lib/utils"
+import { cn, formatQuantity } from "@/lib/utils"
 
 interface ProcessingRun {
   id: string
@@ -140,7 +140,7 @@ export function ProcessingAnalytics() {
           {/* Summary Cards */}
           <div className="grid gap-4 sm:grid-cols-2">
             <StatCard label="Total Runs" value={totalRuns.toString()} icon={BarChart3} description={tab} />
-            <StatCard label="Total Processed" value={`${totalProcessed.toLocaleString()} kg`} icon={Package} description="total input volume" />
+            <StatCard label="Total Processed" value={`${formatQuantity(totalProcessed)} kg`} icon={Package} description="total input volume" />
           </div>
 
           {/* Product Yield Cards */}
@@ -166,7 +166,7 @@ export function ProcessingAnalytics() {
                           }}
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1.5">{p.totalKg.toFixed(1)} kg from {p.count} run{p.count !== 1 ? "s" : ""}</p>
+                      <p className="text-xs text-muted-foreground mt-1.5">{formatQuantity(p.totalKg)} kg from {p.count} run{p.count !== 1 ? "s" : ""}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -188,7 +188,7 @@ export function ProcessingAnalytics() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} unit="%" />
-                      <Tooltip />
+                      <Tooltip formatter={(value) => `${formatQuantity(Number(value))}%`} />
                       <Legend />
                       {allProductTypes.map((type) => (
                         <Line
@@ -238,14 +238,14 @@ export function ProcessingAnalytics() {
                       <TableRow key={run.id}>
                         <TableCell className="whitespace-nowrap text-sm">{run.date}</TableCell>
                         <TableCell className="font-mono text-sm font-medium">{run.batchId}</TableCell>
-                        <TableCell className="text-right text-sm font-medium">{run.totalInputKg.toFixed(1)}</TableCell>
+                        <TableCell className="text-right text-sm font-medium">{formatQuantity(run.totalInputKg)}</TableCell>
                         {allProductTypes.map((type) => {
                           const output = run.outputs.find((o) => o.productType === type)
                           if (!output) return <TableCell key={type} className="text-right text-sm text-muted-foreground">—</TableCell>
                           const yieldPct = run.totalInputKg > 0 ? (output.kg / run.totalInputKg) * 100 : 0
                           return (
                             <TableCell key={type} className="text-right text-sm">
-                              <span className="font-medium">{output.kg.toFixed(1)}</span>
+                              <span className="font-medium">{formatQuantity(output.kg)}</span>
                               <span className="text-muted-foreground ml-1 text-xs">({yieldPct.toFixed(1)}%)</span>
                             </TableCell>
                           )

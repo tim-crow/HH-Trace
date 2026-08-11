@@ -41,7 +41,7 @@ import { OrderManagement } from "@/components/order-management"
 import { AuditLogView } from "@/components/audit-log-view"
 import { ProcessingAnalytics } from "@/components/processing-analytics"
 import { AssistantChat } from "@/components/assistant-chat"
-import { generateId } from "@/lib/utils"
+import { formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
 import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, ProcessingRun } from "@/lib/types"
@@ -53,6 +53,26 @@ interface PackingSlipData {
   customer: string
   address: string
   products: { productType: string; batchCode: string; weight: number }[]
+}
+
+function normalizeBulkProductQuantities(products: BulkProduct[]) {
+  return products.map((product) => ({
+    ...product,
+    kg: Number.isFinite(Number.parseFloat(product.kg)) ? String(roundQuantity(Number.parseFloat(product.kg))) : product.kg,
+  }))
+}
+
+function normalizeFinishedProductQuantities(products: FinishedProduct[]) {
+  const normalize = (value: string) => Number.isFinite(Number.parseFloat(value)) ? String(roundQuantity(Number.parseFloat(value))) : value
+  return products.map((product) => ({
+    ...product,
+    hearts: normalize(product.hearts),
+    hulls: normalize(product.hulls),
+    lights: normalize(product.lights),
+    overs: normalize(product.overs),
+    oil: normalize(product.oil),
+    mealProteinKg: normalize(product.mealProteinKg),
+  }))
 }
 
 function escapePackingSlipValue(value: string | number) {
@@ -72,7 +92,7 @@ function openPackingSlip(data: PackingSlipData) {
     <tr>
       <td>${escapePackingSlipValue(product.productType)}</td>
       <td class="batch">${escapePackingSlipValue(product.batchCode)}</td>
-      <td class="quantity">${escapePackingSlipValue(product.weight)} kg</td>
+      <td class="quantity">${escapePackingSlipValue(formatQuantity(product.weight))} kg</td>
     </tr>
   `).join("")
 
@@ -231,7 +251,7 @@ function AppContent() {
       id: generateId("INV"),
       productType: formData.productType || "Whole Seeds",
       batchCode: formData.batchCode,
-      quantity: Number.parseFloat(formData.quantity),
+      quantity: roundQuantity(Number.parseFloat(formData.quantity)),
       location: formData.location || "Factory",
       lastUpdated: new Date().toISOString(),
     }
@@ -249,7 +269,7 @@ function AppContent() {
     setRecords((prev) => [...prev, newRecord])
     supabase.from('inventory').insert({ id: newItem.id, product_type: newItem.productType, batch_code: newItem.batchCode, quantity: newItem.quantity, location: newItem.location, last_updated: newItem.lastUpdated }).then()
     supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, supplier: newRecord.supplier, status: newRecord.status }).then()
-    logAction(user.name, user.role, "Created Receival", formData.batchCode, `${formData.productType || "Whole Seeds"} — ${formData.quantity} kg from ${formData.supplier || "unknown supplier"} at ${formData.location || "Factory"}`)
+    logAction(user.name, user.role, "Created Receival", formData.batchCode, `${formData.productType || "Whole Seeds"} — ${formatQuantity(newItem.quantity)} kg from ${formData.supplier || "unknown supplier"} at ${formData.location || "Factory"}`)
     showMessage("Receival record added successfully!")
   }
 
@@ -290,7 +310,7 @@ function AppContent() {
         })
       } else if (processType === "combining") {
         const productType = bulkProducts[0]?.productType
-        const quantity = bulkProducts.reduce((sum, product) => sum + (Number.parseFloat(product.kg) || 0), 0)
+        const quantity = roundQuantity(bulkProducts.reduce((sum, product) => sum + (Number.parseFloat(product.kg) || 0), 0))
         if (productType && quantity > 0) totals[productType] = quantity
       }
 
@@ -304,7 +324,7 @@ function AppContent() {
           id: generateId("INV"),
           productType,
           batchCode: formData.batchId,
-          quantity,
+          quantity: roundQuantity(quantity),
           location: "Factory",
           lastUpdated: new Date().toISOString(),
         })
@@ -319,11 +339,11 @@ function AppContent() {
       }
       const inputDeductions = new Map<string, number>()
       bulkProducts.forEach((product) => {
-        const quantity = Number.parseFloat(product.kg)
+        const quantity = roundQuantity(Number.parseFloat(product.kg))
         const productType = inputProductTypes[product.productType] || product.productType
         if (!product.batchCode || !productType || !Number.isFinite(quantity) || quantity <= 0) return
         const key = `${productType}\u0000${product.batchCode}`
-        inputDeductions.set(key, (inputDeductions.get(key) || 0) + quantity)
+        inputDeductions.set(key, roundQuantity((inputDeductions.get(key) || 0) + quantity))
       })
 
       const inventoryUpdates = new Map<string, { quantity: number; lastUpdated: string }>()
@@ -346,12 +366,12 @@ function AppContent() {
           return
         }
         if (item.quantity < quantity) {
-          inputError = `${productType} batch ${batchCode} only has ${item.quantity}kg available; ${quantity}kg was requested.`
+          inputError = `${productType} batch ${batchCode} only has ${formatQuantity(item.quantity)}kg available; ${formatQuantity(quantity)}kg was requested.`
           return
         }
 
         const lastUpdated = new Date().toISOString()
-        const remainingQuantity = item.quantity - quantity
+        const remainingQuantity = roundQuantity(item.quantity - quantity)
         inventoryUpdates.set(item.id, { quantity: remainingQuantity, lastUpdated })
       })
       if (inputError) {
@@ -373,7 +393,7 @@ function AppContent() {
         supabase.from('inventory').insert({ id: item.id, product_type: item.productType, batch_code: item.batchCode, quantity: item.quantity, location: item.location, last_updated: item.lastUpdated }).then()
       })
 
-      const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
+      const totalKg = roundQuantity(bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0))
       const runId = generateId("PR")
       const newRecord: TransactionRecord = {
         id: generateId("REC"),
@@ -395,8 +415,8 @@ function AppContent() {
         staffNames: formData.staffNames,
         notes: formData.notes || "",
         oilPressType: formData.oilPressType || "",
-        bulkProducts,
-        finishedProducts,
+        bulkProducts: normalizeBulkProductQuantities(bulkProducts),
+        finishedProducts: normalizeFinishedProductQuantities(finishedProducts),
       }
       supabase.from('processing_runs').insert({
         id: runId,
@@ -407,17 +427,17 @@ function AppContent() {
         outputs: outputs,
         form_data: formSnapshot,
       }).then()
-      logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${totalKg} kg input, ${newInventoryItems.length} outputs created`)
+      logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${formatQuantity(totalKg)} kg input, ${newInventoryItems.length} outputs created`)
       showMessage(processType === "combining" ? "Combined batch created successfully!" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
       onCommitted?.()
     }
 
-    const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
+    const totalKg = roundQuantity(bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0))
     setConfirmAction({
       title: processType === "combining" ? "Confirm Batch Combination" : `Confirm ${processType.charAt(0).toUpperCase() + processType.slice(1)} Record`,
       description: processType === "combining"
-        ? `This will deduct ${totalKg} kg from the selected source batches and create batch ${formData.batchId}. The source genealogy will be saved.`
-        : `This will deduct ${totalKg} kg from input batches and create finished product inventory items. This action is recorded in the audit log.`,
+        ? `This will deduct ${formatQuantity(totalKg)} kg from the selected source batches and create batch ${formData.batchId}. The source genealogy will be saved.`
+        : `This will deduct ${formatQuantity(totalKg)} kg from input batches and create finished product inventory items. This action is recorded in the audit log.`,
       onConfirm: doProcess,
     })
   }
@@ -428,11 +448,14 @@ function AppContent() {
       showMessage("Only admins can edit inventory records. Please ask an admin to make this change.")
       return
     }
+    const roundedData: Partial<InventoryItem> = data.quantity === undefined
+      ? data
+      : { ...data, quantity: roundQuantity(data.quantity) }
     setInventory((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, ...data, lastUpdated: new Date().toISOString() } : i))
+      prev.map((i) => (i.id === id ? { ...i, ...roundedData, lastUpdated: new Date().toISOString() } : i))
     )
-    supabase.from('inventory').update({ quantity: data.quantity, location: data.location, last_updated: new Date().toISOString() }).eq('id', id).then()
-    logAction(user.name, user.role, "Updated Inventory", item?.batchCode || id, `Quantity: ${data.quantity ?? item?.quantity} kg, Location: ${data.location ?? item?.location}`)
+    supabase.from('inventory').update({ quantity: roundedData.quantity, location: roundedData.location, last_updated: new Date().toISOString() }).eq('id', id).then()
+    logAction(user.name, user.role, "Updated Inventory", item?.batchCode || id, `Quantity: ${formatQuantity(roundedData.quantity ?? item?.quantity ?? 0)} kg, Location: ${roundedData.location ?? item?.location}`)
     showMessage("Record updated successfully!")
   }
 
@@ -467,7 +490,7 @@ function AppContent() {
       setRecords((prev) => [...prev, newRecord])
       supabase.from('inventory').update({ deleted: true, deleted_at: new Date().toISOString(), deleted_by: user.name }).eq('id', itemToDelete.id).then()
       supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, status: newRecord.status }).then()
-      logAction(user.name, user.role, "Deleted Inventory", itemToDelete.batchCode, `Soft-deleted ${itemToDelete.productType} — ${itemToDelete.quantity} kg from ${itemToDelete.location}`)
+      logAction(user.name, user.role, "Deleted Inventory", itemToDelete.batchCode, `Soft-deleted ${itemToDelete.productType} — ${formatQuantity(itemToDelete.quantity)} kg from ${itemToDelete.location}`)
       showMessage(`Inventory item ${itemToDelete.batchCode} deleted successfully!`)
     }
     setDeleteOpen(false)
@@ -483,7 +506,7 @@ function AppContent() {
       )
     )
     supabase.from('inventory').update({ deleted: false, deleted_at: null, deleted_by: null, last_updated: new Date().toISOString() }).eq('id', item.id).then()
-    logAction(user.name, user.role, "Restored Inventory", item.batchCode, `Restored ${item.productType} — ${item.quantity} kg`)
+    logAction(user.name, user.role, "Restored Inventory", item.batchCode, `Restored ${item.productType} — ${formatQuantity(item.quantity)} kg`)
     showMessage(`Inventory item ${item.batchCode} restored!`)
   }
 
@@ -527,10 +550,10 @@ function AppContent() {
         notes: fd.notes || "",
         oilPressType: fd.oilPressType || "",
         bulkProducts: Array.isArray(fd.bulkProducts) && fd.bulkProducts.length
-          ? fd.bulkProducts
+          ? normalizeBulkProductQuantities(fd.bulkProducts)
           : [{ bag: "", productType: "", kg: "", batchCode: "", notes: "" }],
         finishedProducts: Array.isArray(fd.finishedProducts) && fd.finishedProducts.length
-          ? fd.finishedProducts
+          ? normalizeFinishedProductQuantities(fd.finishedProducts)
           : [{ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "" }],
         totalInputKg: (data as any).total_input_kg ?? record.quantity,
       })
@@ -551,14 +574,14 @@ function AppContent() {
       return
     }
 
-    const totalKg = bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0)
+    const totalKg = roundQuantity(bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0))
     const formSnapshot = {
       staffCount: formData.staffCount,
       staffNames: formData.staffNames,
       notes: formData.notes || "",
       oilPressType: formData.oilPressType || "",
-      bulkProducts,
-      finishedProducts,
+      bulkProducts: normalizeBulkProductQuantities(bulkProducts),
+      finishedProducts: normalizeFinishedProductQuantities(finishedProducts),
     }
 
     const inputProductTypes: Record<string, string> = {
@@ -571,20 +594,20 @@ function AppContent() {
     const getInputTotals = (products: BulkProduct[]) => {
       const totals = new Map<string, number>()
       products.forEach((product) => {
-        const quantity = Number.parseFloat(product.kg)
+        const quantity = roundQuantity(Number.parseFloat(product.kg))
         const productType = inputProductTypes[product.productType] || product.productType
         if (!product.batchCode || !productType || !Number.isFinite(quantity) || quantity <= 0) return
         const key = `${productType}\u0000${product.batchCode}`
-        totals.set(key, (totals.get(key) || 0) + quantity)
+        totals.set(key, roundQuantity((totals.get(key) || 0) + quantity))
       })
       return totals
     }
     const getOutputTotals = (runProcessType: string, products: FinishedProduct[], sourceProducts: BulkProduct[]) => {
       const totals: Record<string, number> = {}
       const add = (productType: string, value: string | undefined) => {
-        const quantity = Number.parseFloat(value || "")
+        const quantity = roundQuantity(Number.parseFloat(value || ""))
         if (Number.isFinite(quantity) && quantity > 0) {
-          totals[productType] = (totals[productType] || 0) + quantity
+          totals[productType] = roundQuantity((totals[productType] || 0) + quantity)
         }
       }
       if (runProcessType === "dehulling") {
@@ -601,7 +624,7 @@ function AppContent() {
         })
       } else if (runProcessType === "combining") {
         const productType = sourceProducts[0]?.productType
-        const quantity = sourceProducts.reduce((sum, product) => sum + (Number.parseFloat(product.kg) || 0), 0)
+        const quantity = roundQuantity(sourceProducts.reduce((sum, product) => sum + (Number.parseFloat(product.kg) || 0), 0))
         if (productType && quantity > 0) totals[productType] = quantity
       }
       return totals
@@ -656,7 +679,7 @@ function AppContent() {
           id: generateId("INV"),
           productType,
           batchCode,
-          quantity: delta,
+          quantity: roundQuantity(delta),
           location: "Factory",
           lastUpdated: now,
         })
@@ -665,10 +688,10 @@ function AppContent() {
 
       const revisedQuantity = item.quantity + delta
       if (revisedQuantity < -0.000001) {
-        inventoryError = `${productType} batch ${batchCode} only has ${item.quantity}kg available; this update needs ${Math.abs(delta)}kg.`
+        inventoryError = `${productType} batch ${batchCode} only has ${formatQuantity(item.quantity)}kg available; this update needs ${formatQuantity(Math.abs(delta))}kg.`
         return
       }
-      inventoryUpdates.set(item.id, Math.max(0, revisedQuantity))
+      inventoryUpdates.set(item.id, roundQuantity(Math.max(0, revisedQuantity)))
     })
 
     if (inventoryError) {
@@ -722,7 +745,7 @@ function AppContent() {
       }).eq('id', updatedRecord.id).then()
     }
 
-    logAction(user.name, user.role, "Edited Processing", formData.batchId, `Updated ${processType} run — ${totalKg} kg total, ${bulkProducts.length} bulk lines, ${finishedProducts.length} finished lines`)
+    logAction(user.name, user.role, "Edited Processing", formData.batchId, `Updated ${processType} run — ${formatQuantity(totalKg)} kg total, ${bulkProducts.length} bulk lines, ${finishedProducts.length} finished lines`)
     showMessage(processType === "combining" ? "Batch combination updated!" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} record updated!`)
     setEditingProcessingRun(null)
     setActiveSection("records")
@@ -735,14 +758,14 @@ function AppContent() {
     }
     setConfirmAction({
       title: `Delete ${record.type} Record?`,
-      description: `This will soft-delete the ${record.type} record for batch ${record.batchCode} (${record.productType}, ${record.quantity} kg). It can be restored later by an admin. Inventory and ledger quantities are NOT retroactively adjusted.`,
+      description: `This will soft-delete the ${record.type} record for batch ${record.batchCode} (${record.productType}, ${formatQuantity(record.quantity)} kg). It can be restored later by an admin. Inventory and ledger quantities are NOT retroactively adjusted.`,
       onConfirm: () => {
         const now = new Date().toISOString()
         setRecords((prev) =>
           prev.map((r) => (r.id === record.id ? { ...r, deleted: true, deletedAt: now, deletedBy: user.name } : r))
         )
         supabase.from('records').update({ deleted: true, deleted_at: now, deleted_by: user.name }).eq('id', record.id).then()
-        logAction(user.name, user.role, "Deleted Record", record.batchCode, `Soft-deleted ${record.type} record: ${record.productType} — ${record.quantity} kg`)
+        logAction(user.name, user.role, "Deleted Record", record.batchCode, `Soft-deleted ${record.type} record: ${record.productType} — ${formatQuantity(record.quantity)} kg`)
         showMessage(`${record.type} record for ${record.batchCode} deleted.`)
       },
     })
@@ -754,7 +777,7 @@ function AppContent() {
       prev.map((r) => (r.id === record.id ? { ...r, deleted: false, deletedAt: undefined, deletedBy: undefined } : r))
     )
     supabase.from('records').update({ deleted: false, deleted_at: null, deleted_by: null }).eq('id', record.id).then()
-    logAction(user.name, user.role, "Restored Record", record.batchCode, `Restored ${record.type} record: ${record.productType} — ${record.quantity} kg`)
+    logAction(user.name, user.role, "Restored Record", record.batchCode, `Restored ${record.type} record: ${record.productType} — ${formatQuantity(record.quantity)} kg`)
     showMessage(`${record.type} record for ${record.batchCode} restored.`)
   }
 
@@ -816,7 +839,7 @@ function AppContent() {
               outgoingTotals.set(key, {
                 productType: p.productType,
                 batchCode: p.batchCode,
-                quantity: (existing?.quantity || 0) + p.weight,
+                quantity: roundQuantity((existing?.quantity || 0) + p.weight),
               })
             })
             const now = new Date().toISOString()
@@ -836,7 +859,7 @@ function AppContent() {
                 showMessage(`${outgoing.productType} batch ${outgoing.batchCode} does not have enough stock for this dispatch.`)
                 return
               }
-              outgoingUpdates.set(item.id, item.quantity - outgoing.quantity)
+              outgoingUpdates.set(item.id, roundQuantity(item.quantity - outgoing.quantity))
             }
             outgoingUpdates.forEach((quantity, id) => {
               supabase.from('inventory').update({ quantity, last_updated: now }).eq('id', id).then()
@@ -883,8 +906,8 @@ function AppContent() {
               handleOrdersChange(orders.map(updateOrder))
               setOutgoingPrefill(null)
             }
-            const totalKg = products.reduce((s, p) => s + p.weight, 0)
-            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `${totalKg} kg to ${customerName} via ${freight || "N/A"}: ${products.map(p => `${p.productType} ${p.batchCode} ${p.weight}kg`).join(", ")}`)
+            const totalKg = roundQuantity(products.reduce((s, p) => s + p.weight, 0))
+            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `${formatQuantity(totalKg)} kg to ${customerName} via ${freight || "N/A"}: ${products.map(p => `${p.productType} ${p.batchCode} ${formatQuantity(p.weight)}kg`).join(", ")}`)
             const packingSlipOpened = openPackingSlip({
               number: `PS-${dispatchDate.replaceAll("-", "")}-${Date.now().toString().slice(-6)}`,
               date: dispatchDate,
@@ -945,19 +968,20 @@ function AppContent() {
           onRecordDelete={handleRecordDelete}
           onRecordRestore={handleRecordRestore}
           onRecordUpdate={(updated) => {
-            setRecords((prev) => prev.map((r) => r.id === updated.id ? updated : r))
+            const roundedUpdated = { ...updated, quantity: roundQuantity(updated.quantity) }
+            setRecords((prev) => prev.map((r) => r.id === roundedUpdated.id ? roundedUpdated : r))
             supabase.from('records').update({
-              date: updated.date,
-              product_type: updated.productType,
-              batch_code: updated.batchCode,
-              quantity: updated.quantity,
-              supplier: updated.supplier || null,
-              processor: updated.processor || null,
-              customer: updated.customer || null,
-              status: updated.status,
-            }).eq('id', updated.id).then()
-            logAction(user.name, user.role, "Edited Record", updated.batchCode, `Modified ${updated.type} record: ${updated.productType} — ${updated.quantity} kg`)
-            showMessage(`Record ${updated.batchCode} updated!`)
+              date: roundedUpdated.date,
+              product_type: roundedUpdated.productType,
+              batch_code: roundedUpdated.batchCode,
+              quantity: roundedUpdated.quantity,
+              supplier: roundedUpdated.supplier || null,
+              processor: roundedUpdated.processor || null,
+              customer: roundedUpdated.customer || null,
+              status: roundedUpdated.status,
+            }).eq('id', roundedUpdated.id).then()
+            logAction(user.name, user.role, "Edited Record", roundedUpdated.batchCode, `Modified ${roundedUpdated.type} record: ${roundedUpdated.productType} — ${formatQuantity(roundedUpdated.quantity)} kg`)
+            showMessage(`Record ${roundedUpdated.batchCode} updated!`)
           }}
         />
       case "analytics":
@@ -1013,7 +1037,7 @@ function AppContent() {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove the inventory item &quot;{itemToDelete?.batchCode}&quot; (
-              {itemToDelete?.productType}) with {itemToDelete?.quantity}kg from {itemToDelete?.location}.
+              {itemToDelete?.productType}) with {formatQuantity(itemToDelete?.quantity ?? 0)}kg from {itemToDelete?.location}.
               The record will be kept and can be restored later.
             </AlertDialogDescription>
           </AlertDialogHeader>

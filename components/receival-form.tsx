@@ -127,7 +127,7 @@ export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="quantity">Quantity (kg) *</Label>
-              <Input id="quantity" type="number" min={0} step="0.01" value={form.quantity} onChange={(e) => updateField("quantity", e.target.value)} />
+              <Input id="quantity" type="number" min={0} step="0.1" value={form.quantity} onChange={(e) => updateField("quantity", e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Storage Location</Label>

@@ -4,7 +4,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Bot, X, Send, Sparkles, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatQuantity } from "@/lib/utils"
 import type { InventoryItem, TransactionRecord } from "@/lib/types"
 
 interface Message {
@@ -59,9 +59,9 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         })
         const breakdown = Object.entries(byType)
           .sort((a, b) => b[1] - a[1])
-          .map(([type, qty]) => `• **${type}**: ${qty.toLocaleString()} kg`)
+          .map(([type, qty]) => `• **${type}**: ${formatQuantity(qty)} kg`)
           .join("\n")
-        return `📦 **Inventory Summary**\n\nTotal: **${totalKg.toLocaleString()} kg** across **${inventory.length}** batches.\n\n${breakdown}`
+        return `📦 **Inventory Summary**\n\nTotal: **${formatQuantity(totalKg)} kg** across **${inventory.length}** batches.\n\n${breakdown}`
       }
 
       // Low stock / running low
@@ -73,7 +73,7 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         }
         let response = "⚠️ **Low Stock Alert**\n\n"
         if (lowItems.length > 0) {
-          response += "**Below 50 kg:**\n" + lowItems.map((item) => `• ${item.productType} (${item.batchCode}): **${item.quantity} kg** — ${item.location}`).join("\n")
+          response += "**Below 50 kg:**\n" + lowItems.map((item) => `• ${item.productType} (${item.batchCode}): **${formatQuantity(item.quantity)} kg** — ${item.location}`).join("\n")
         }
         if (emptyItems.length > 0) {
           response += "\n\n**Depleted (0 kg):**\n" + emptyItems.map((item) => `• ${item.productType} (${item.batchCode}) — ${item.location}`).join("\n")
@@ -91,7 +91,7 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         }
         let response = `📋 **Today's Activity** (${today})\n\n`
         if (todaysRecords.length > 0) {
-          response += "**Records:**\n" + todaysRecords.map((r) => `• ${r.type}: ${r.productType} — ${r.batchCode} (${r.quantity} kg)`).join("\n")
+          response += "**Records:**\n" + todaysRecords.map((r) => `• ${r.type}: ${r.productType} — ${r.batchCode} (${formatQuantity(r.quantity)} kg)`).join("\n")
         }
         if (todaysInventory.length > 0) {
           response += `\n\n**${todaysInventory.length}** inventory items updated today.`
@@ -122,8 +122,8 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
           return `No **${displayName}** found in current inventory.`
         }
         const totalKg = items.reduce((sum, item) => sum + item.quantity, 0)
-        const list = items.map((item) => `• ${item.batchCode}: **${item.quantity} kg** — ${item.location}`).join("\n")
-        return `🔍 **${displayName}** — ${totalKg.toLocaleString()} kg total across ${items.length} batch${items.length > 1 ? "es" : ""}\n\n${list}`
+        const list = items.map((item) => `• ${item.batchCode}: **${formatQuantity(item.quantity)} kg** — ${item.location}`).join("\n")
+        return `🔍 **${displayName}** — ${formatQuantity(totalKg)} kg total across ${items.length} batch${items.length > 1 ? "es" : ""}\n\n${list}`
       }
 
       // Batch lookup
@@ -133,7 +133,7 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
           const code = batchMatch[1]
           const item = inventory.find((i) => i.batchCode.toLowerCase() === code.toLowerCase())
           if (item) {
-            return `🔍 **Batch ${item.batchCode}**\n\n• Product: ${item.productType}\n• Quantity: **${item.quantity} kg**\n• Location: ${item.location}\n• Last Updated: ${new Date(item.lastUpdated).toLocaleString()}`
+            return `🔍 **Batch ${item.batchCode}**\n\n• Product: ${item.productType}\n• Quantity: **${formatQuantity(item.quantity)} kg**\n• Location: ${item.location}\n• Last Updated: ${new Date(item.lastUpdated).toLocaleString()}`
           }
           return `No batch matching "${code}" found in inventory.`
         }
@@ -149,7 +149,7 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         })
         const list = Object.entries(byLocation)
           .sort((a, b) => b[1].totalKg - a[1].totalKg)
-          .map(([loc, data]) => `• **${loc}**: ${data.count} batches, ${data.totalKg.toLocaleString()} kg`)
+          .map(([loc, data]) => `• **${loc}**: ${data.count} batches, ${formatQuantity(data.totalKg)} kg`)
           .join("\n")
         return `📍 **Inventory by Location**\n\n${list}`
       }

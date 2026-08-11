@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Trash2, AlertCircle, X } from "lucide-react"
 import { HEMP_PRODUCTS, PROCESS_TYPES } from "@/lib/constants"
 import type { InventoryItem, BulkProduct, FinishedProduct, AvailableBatch, ProcessingRun } from "@/lib/types"
+import { formatQuantity } from "@/lib/utils"
 
 interface ProcessingFormsProps {
   inventory: InventoryItem[]
@@ -286,10 +287,10 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 {dehullFinished.map((product, index) => (
                   <div key={index} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
                     <div className="space-y-1"><Label className="text-xs">Bin #</Label><Input value={product.bin} onChange={(e) => updateFinished(setDehullFinished, index, "bin", e.target.value)} /></div>
-                    <div className="space-y-1"><Label className="text-xs">Hearts</Label><Input type="number" step="0.01" value={product.hearts} onChange={(e) => updateFinished(setDehullFinished, index, "hearts", e.target.value)} /></div>
-                    <div className="space-y-1"><Label className="text-xs">Hulls</Label><Input type="number" step="0.01" value={product.hulls} onChange={(e) => updateFinished(setDehullFinished, index, "hulls", e.target.value)} /></div>
-                    <div className="space-y-1"><Label className="text-xs">Lights</Label><Input type="number" step="0.01" value={product.lights} onChange={(e) => updateFinished(setDehullFinished, index, "lights", e.target.value)} /></div>
-                    <div className="space-y-1"><Label className="text-xs">Overs</Label><Input type="number" step="0.01" value={product.overs} onChange={(e) => updateFinished(setDehullFinished, index, "overs", e.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Hearts</Label><Input type="number" step="0.1" value={product.hearts} onChange={(e) => updateFinished(setDehullFinished, index, "hearts", e.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Hulls</Label><Input type="number" step="0.1" value={product.hulls} onChange={(e) => updateFinished(setDehullFinished, index, "hulls", e.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Lights</Label><Input type="number" step="0.1" value={product.lights} onChange={(e) => updateFinished(setDehullFinished, index, "lights", e.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Overs</Label><Input type="number" step="0.1" value={product.overs} onChange={(e) => updateFinished(setDehullFinished, index, "overs", e.target.value)} /></div>
                     <div className="flex items-end">
                       <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" disabled={dehullFinished.length <= 1} onClick={() => removeAt(setDehullFinished, index)}>
                         <Trash2 className="h-4 w-4" />
@@ -351,7 +352,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 {pressFinished.map((product, index) => (
                   <div key={index} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
                     <div className="space-y-1"><Label className="text-xs">Bin #</Label><Input value={product.bin} onChange={(e) => updateFinished(setPressFinished, index, "bin", e.target.value)} /></div>
-                    <div className="space-y-1"><Label className="text-xs">Oil</Label><Input type="number" step="0.01" value={product.oil} onChange={(e) => updateFinished(setPressFinished, index, "oil", e.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Oil</Label><Input type="number" step="0.1" value={product.oil} onChange={(e) => updateFinished(setPressFinished, index, "oil", e.target.value)} /></div>
                     <div className="space-y-1">
                       <Label className="text-xs">Meal/Protein</Label>
                       <Select value={product.mealProtein} onValueChange={(v) => updateFinished(setPressFinished, index, "mealProtein", v)}>
@@ -359,7 +360,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                         <SelectContent><SelectItem value="meal">MEAL</SelectItem><SelectItem value="protein">PROTEIN</SelectItem></SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1"><Label className="text-xs">Meal/Protein KG</Label><Input type="number" step="0.01" value={product.mealProteinKg} onChange={(e) => updateFinished(setPressFinished, index, "mealProteinKg", e.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Meal/Protein KG</Label><Input type="number" step="0.1" value={product.mealProteinKg} onChange={(e) => updateFinished(setPressFinished, index, "mealProteinKg", e.target.value)} /></div>
                     <div className="flex items-end">
                       <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" disabled={pressFinished.length <= 1} onClick={() => removeAt(setPressFinished, index)}>
                         <Trash2 className="h-4 w-4" />
@@ -428,9 +429,9 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold">Source Batches</h4>
                   <span className="text-sm text-muted-foreground">
-                    Total: {combineSources.reduce((sum, source) =>
+                    Total: {formatQuantity(combineSources.reduce((sum, source) =>
                       source.batchCode && Number.parseFloat(source.kg) > 0 ? sum + Number.parseFloat(source.kg) : sum,
-                    0).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                    0))} kg
                   </span>
                 </div>
                 {combineSources.map((source, index) => {
@@ -450,7 +451,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                           <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
                           <SelectContent>
                             {availableBatches.map((batch) => (
-                              <SelectItem key={batch.batchCode} value={batch.batchCode}>{batch.batchCode} ({batch.quantity} kg available)</SelectItem>
+                              <SelectItem key={batch.batchCode} value={batch.batchCode}>{batch.batchCode} ({formatQuantity(batch.quantity)} kg available)</SelectItem>
                             ))}
                             {source.batchCode && !availableBatches.some((batch) => batch.batchCode === source.batchCode) && (
                               <SelectItem value={source.batchCode}>{source.batchCode} (saved)</SelectItem>
@@ -463,7 +464,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                         <Input
                           type="number"
                           min={0}
-                          step="0.01"
+                          step="0.1"
                           value={source.kg}
                           onChange={(event) => setCombineSources((sources) => sources.map((item, itemIndex) =>
                             itemIndex === index ? { ...item, productType: combineProductType, kg: event.target.value } : item
@@ -515,7 +516,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
             <CardContent className="space-y-5">
               <div className="space-y-2"><Label>Date *</Label><Input type="date" required /></div>
               <div className="space-y-2"><Label>Input Type *</Label><Select><SelectTrigger><SelectValue placeholder="Select input type" /></SelectTrigger><SelectContent>{HEMP_PRODUCTS.filter((p) => !["Whole Seeds", "Finished Goods"].includes(p)).map((product) => (<SelectItem key={product} value={product.toLowerCase().replace(/\s+/g, "-")}>{product}</SelectItem>))}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Input Volume (kg) *</Label><Input type="number" min={0} step="0.01" required /></div>
+              <div className="space-y-2"><Label>Input Volume (kg) *</Label><Input type="number" min={0} step="0.1" required /></div>
               <div className="space-y-2"><Label>Input Batch No</Label><Input placeholder="Enter batch number" /></div>
               <div className="space-y-2"><Label>Process Undertaken *</Label><Select><SelectTrigger><SelectValue placeholder="Select process" /></SelectTrigger><SelectContent>{PROCESS_TYPES.map((process) => (<SelectItem key={process} value={process.toLowerCase()}>{process}</SelectItem>))}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Finished Goods Info</Label><Input placeholder="e.g., Hemp oil 500kg" /></div>
@@ -593,14 +594,14 @@ function BulkProductSection({ products, onChange, getAvailableBatches, productOp
               <SelectContent>{productOptions.map((opt) => (<SelectItem key={opt.key} value={opt.key}>{opt.label}</SelectItem>))}</SelectContent>
             </Select>
           </div>
-          <div className="space-y-1"><Label className="text-xs">KG&apos;s *</Label><Input type="number" step="0.01" value={product.kg} onChange={(e) => update(index, "kg", e.target.value)} required /></div>
+          <div className="space-y-1"><Label className="text-xs">KG&apos;s *</Label><Input type="number" step="0.1" value={product.kg} onChange={(e) => update(index, "kg", e.target.value)} required /></div>
           <div className="space-y-1">
             <Label className="text-xs">Batch Code</Label>
             <Select value={product.batchCode} onValueChange={(v) => update(index, "batchCode", v)} disabled={!product.productType}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
                 {getAvailableBatches(product.productType).map((batch) => (
-                  <SelectItem key={batch.batchCode} value={batch.batchCode}>{batch.batchCode} ({batch.quantity}kg)</SelectItem>
+                  <SelectItem key={batch.batchCode} value={batch.batchCode}>{batch.batchCode} ({formatQuantity(batch.quantity)}kg)</SelectItem>
                 ))}
                 {/* When editing, the saved batch may no longer be in factory stock — keep it selectable */}
                 {product.batchCode && !getAvailableBatches(product.productType).some((b) => b.batchCode === product.batchCode) && (

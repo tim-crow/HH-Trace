@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Plus, Eye, Edit, Search, Printer, Download, Trash2 } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
-import { cn, generateId } from "@/lib/utils"
+import { cn, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
 import { HEMP_PRODUCTS, FINISHED_GOODS, PRODUCT_UNIT_WEIGHTS } from "@/lib/constants"
 import type { Order, OrderStatus, FreightMethod, OrderItem } from "@/lib/types"
@@ -41,16 +41,16 @@ const FREIGHT_METHODS: FreightMethod[] = ["Courier", "Auspost", "Bulk"]
 
 function formatItemDisplay(item: { productType: string; quantity: number; units?: number }): string {
   if (item.units && PRODUCT_UNIT_WEIGHTS[item.productType]) {
-    return `${item.units}x ${item.productType} (${item.quantity} kg)`
+    return `${item.units}x ${item.productType} (${formatQuantity(item.quantity)} kg)`
   }
-  return `${item.productType} — ${item.quantity} kg`
+  return `${item.productType} — ${formatQuantity(item.quantity)} kg`
 }
 
 function formatItemSummary(item: { productType: string; quantity: number; units?: number }): string {
   if (item.units && PRODUCT_UNIT_WEIGHTS[item.productType]) {
-    return `${item.units}x ${item.productType} (${item.quantity}kg)`
+    return `${item.units}x ${item.productType} (${formatQuantity(item.quantity)}kg)`
   }
-  return `${item.productType} ${item.quantity}kg`
+  return `${item.productType} ${formatQuantity(item.quantity)}kg`
 }
 
 const ORDER_STATUSES: OrderStatus[] = ["New", "In Progress", "Packed", "Dispatched", "Completed"]
@@ -158,9 +158,13 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
 
   const handleEditSave = () => {
     if (!editOrder) return
+    const roundedOrder = {
+      ...editOrder,
+      items: editOrder.items?.map((item) => ({ ...item, quantity: roundQuantity(item.quantity) })),
+    }
     onOrdersChange(orders.map((o) =>
       o.id === editOrder.id
-        ? { ...editOrder, lastUpdatedBy: userName, lastUpdated: new Date().toISOString() }
+        ? { ...roundedOrder, lastUpdatedBy: userName, lastUpdated: new Date().toISOString() }
         : o
     ))
     onAuditLog("Edited Order", editOrder.orderNumber, `Updated details for ${editOrder.customer}`)
@@ -227,7 +231,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
       ${order.notes ? `<div class="details-box" style="border-left:3px solid #f59e0b"><label>Notes for Team</label><p>${order.notes}</p></div>` : ""}
       ${order.items && order.items.length > 0
         ? `<table class="items-table"><thead><tr><th>Product</th><th>Qty</th><th>Status</th></tr></thead><tbody>${order.items.map(item =>
-            `<tr><td>${item.productType}</td><td>${item.units ? `${item.units} units (${item.quantity} kg)` : `${item.quantity} kg`}</td><td><span class="status-badge ${item.fulfilled ? "status-fulfilled" : "status-pending"}">${item.fulfilled ? "Fulfilled" : "Pending"}</span></td></tr>`
+            `<tr><td>${item.productType}</td><td>${item.units ? `${item.units} units (${formatQuantity(item.quantity)} kg)` : `${formatQuantity(item.quantity)} kg`}</td><td><span class="status-badge ${item.fulfilled ? "status-fulfilled" : "status-pending"}">${item.fulfilled ? "Fulfilled" : "Pending"}</span></td></tr>`
           ).join("")}</tbody></table>`
         : `<div class="details-box"><label>Order Details</label><p>${order.details || "—"}</p></div>`
       }
@@ -277,7 +281,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
         ${order.notes ? `<div class="details-box" style="border-left:3px solid #f59e0b"><label>Notes for Team</label><p>${order.notes}</p></div>` : ""}
         ${order.items && order.items.length > 0
           ? `<table class="items-table"><thead><tr><th>Product</th><th>Qty</th><th>Status</th></tr></thead><tbody>${order.items.map(item =>
-              `<tr><td>${item.productType}</td><td>${item.units ? `${item.units} units (${item.quantity} kg)` : `${item.quantity} kg`}</td><td><span class="status-badge ${item.fulfilled ? "status-fulfilled" : "status-pending"}">${item.fulfilled ? "Fulfilled" : "Pending"}</span></td></tr>`
+              `<tr><td>${item.productType}</td><td>${item.units ? `${item.units} units (${formatQuantity(item.quantity)} kg)` : `${formatQuantity(item.quantity)} kg`}</td><td><span class="status-badge ${item.fulfilled ? "status-fulfilled" : "status-pending"}">${item.fulfilled ? "Fulfilled" : "Pending"}</span></td></tr>`
             ).join("")}</tbody></table>`
           : `<div class="details-box"><label>Order Details</label><p>${order.details || "—"}</p></div>`
         }
@@ -572,11 +576,11 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
                             ))}
                           </SelectContent>
                         </Select>
-                        <Input type="number" min={0} placeholder={isUnitBased ? "Units" : "kg"} className="w-24" value={isUnitBased ? (item.units || "") : (item.quantity || "")} onChange={(e) => {
+                        <Input type="number" min={0} step={isUnitBased ? 1 : 0.1} placeholder={isUnitBased ? "Units" : "kg"} className="w-24" value={isUnitBased ? (item.units || "") : (item.quantity || "")} onChange={(e) => {
                           const items = [...(editOrder.items || [])]
                           if (isUnitBased) {
                             const units = parseInt(e.target.value) || 0
-                            items[idx] = { ...items[idx], units, quantity: units * unitWeight }
+                            items[idx] = { ...items[idx], units, quantity: roundQuantity(units * unitWeight) }
                           } else {
                             items[idx] = { ...items[idx], quantity: Number(e.target.value), units: undefined }
                           }
@@ -594,7 +598,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
                         )}
                       </div>
                       {isUnitBased && (item.units || 0) > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1 ml-1">= {((item.units || 0) * unitWeight).toFixed(1)} kg</p>
+                        <p className="text-xs text-muted-foreground mt-1 ml-1">= {formatQuantity((item.units || 0) * unitWeight)} kg</p>
                       )}
                     </div>
                   )
@@ -746,7 +750,7 @@ function NewOrderDialog({ open, onClose, onSubmit, customerNames }: NewOrderDial
     const resolvedItems = items.filter(i => i.productType).map(item => {
       const unitWeight = PRODUCT_UNIT_WEIGHTS[item.productType]
       const units = unitWeight ? parseInt(item.value) || 0 : undefined
-      const quantity = unitWeight ? (units || 0) * unitWeight : parseFloat(item.value) || 0
+      const quantity = roundQuantity(unitWeight ? (units || 0) * unitWeight : parseFloat(item.value) || 0)
       return { productType: item.productType, quantity, units }
     })
     const details = resolvedItems.map(i => formatItemSummary(i)).join(", ")
@@ -798,7 +802,7 @@ function NewOrderDialog({ open, onClose, onSubmit, customerNames }: NewOrderDial
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input type="number" min={0} placeholder={isUnitBased ? "Units" : "kg"} className="w-24" value={item.value} onChange={(e) => {
+                    <Input type="number" min={0} step={isUnitBased ? 1 : 0.1} placeholder={isUnitBased ? "Units" : "kg"} className="w-24" value={item.value} onChange={(e) => {
                       const next = [...items]
                       next[idx] = { ...next[idx], value: e.target.value }
                       setItems(next)
@@ -810,7 +814,7 @@ function NewOrderDialog({ open, onClose, onSubmit, customerNames }: NewOrderDial
                     )}
                   </div>
                   {isUnitBased && item.value && parseInt(item.value) > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1 ml-1">= {(parseInt(item.value) * unitWeight).toFixed(1)} kg</p>
+                    <p className="text-xs text-muted-foreground mt-1 ml-1">= {formatQuantity(parseInt(item.value) * unitWeight)} kg</p>
                   )}
                 </div>
               )

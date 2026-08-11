@@ -13,6 +13,7 @@ import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { HEMP_PRODUCTS, FINISHED_GOODS, BOX_SIZES, PALLET_SIZES, PRODUCT_UNIT_WEIGHTS } from "@/lib/constants"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
 import type { InventoryItem, Order } from "@/lib/types"
+import { formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface ProductLine {
   productType: string
@@ -129,7 +130,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
     setBoxCount(count)
     const n = parseInt(count) || 0
     if (n > 0 && totalProductKg > 0) {
-      const perBox = Math.round((totalProductKg / n) * 100) / 100
+      const perBox = roundQuantity(totalProductKg / n)
       setBoxWeights(Array(n).fill(perBox))
     } else {
       setBoxWeights([])
@@ -172,7 +173,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
         map.set(item.batchCode, (map.get(item.batchCode) || 0) + item.quantity)
       }
       return Array.from(map.entries()).map(([code, qty]) => ({
-        label: `${code} (${qty} kg available)`,
+        label: `${code} (${formatQuantity(qty)} kg available)`,
         value: code,
         qty,
       }))
@@ -187,7 +188,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       if (isNaN(requested) || requested <= 0) return null
       const available = getAvailableStock(p.productType, p.batchCode)
       if (requested > available) {
-        return `Exceeds available stock (${available} kg available)`
+        return `Exceeds available stock (${formatQuantity(available)} kg available)`
       }
       return null
     })
@@ -228,7 +229,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
         const requested = parseFloat(p.weight)
         const available = getAvailableStock(p.productType, p.batchCode)
         if (requested > available) {
-          return `Line ${i + 1}: Batch ${p.batchCode} requires ${requested} kg but only ${available} kg available`
+          return `Line ${i + 1}: Batch ${p.batchCode} requires ${formatQuantity(requested)} kg but only ${formatQuantity(available)} kg available`
         }
         return null
       })
@@ -252,7 +253,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
     if (freightMethod === "Courier" || freightMethod === "Auspost") {
       const resolvedBoxSize = boxSize === "Other" ? customBoxSize : boxSize
       const packagingDetail = resolvedBoxSize && boxCount ? ` (${resolvedBoxSize} x${boxCount})` : ""
-      const weightsDetail = boxWeights.length > 0 ? ` [${boxWeights.map((w, i) => `Box${i + 1}:${w}kg`).join(", ")}]` : ""
+      const weightsDetail = boxWeights.length > 0 ? ` [${boxWeights.map((w, i) => `Box${i + 1}:${formatQuantity(w)}kg`).join(", ")}]` : ""
       formattedFreight = `${freightMethod}${packagingDetail}${weightsDetail}`
     } else if (freightMethod === "Bulk") {
       const packagingDetail = palletSize && palletCount ? ` (${palletSize} pallet x${palletCount})` : ""
@@ -266,7 +267,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       products.map((p) => ({
         productType: p.productType,
         batchCode: p.batchCode,
-        weight: parseFloat(p.weight) || 0,
+        weight: roundQuantity(parseFloat(p.weight) || 0),
       })),
       customerName,
       customerAddress,
@@ -392,13 +393,13 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
                           }}
                         />
                         {product.units && (
-                          <p className="text-xs text-muted-foreground">= {parseFloat(product.weight || "0").toFixed(1)} kg</p>
+                          <p className="text-xs text-muted-foreground">= {formatQuantity(parseFloat(product.weight || "0"))} kg</p>
                         )}
                       </>
                     ) : (
                       <>
                         <Label className="text-xs">Weight (kg)</Label>
-                        <Input type="number" min={0} step="0.01" value={product.weight} onChange={(e) => updateProduct(index, "weight", e.target.value)} />
+                        <Input type="number" min={0} step="0.1" value={product.weight} onChange={(e) => updateProduct(index, "weight", e.target.value)} />
                       </>
                     )}
                     {stockErrors[index] && (
@@ -490,7 +491,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
                         <Input
                           type="number"
                           min={0}
-                          step="0.01"
+                          step="0.1"
                           value={w}
                           onChange={(e) => updateBoxWeight(i, e.target.value)}
                           className="h-8 text-sm"
@@ -499,10 +500,10 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
                     ))}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Total: {boxWeights.reduce((s, w) => s + w, 0).toFixed(2)} kg
+                    Total: {formatQuantity(boxWeights.reduce((s, w) => s + w, 0))} kg
                     {Math.abs(boxWeights.reduce((s, w) => s + w, 0) - totalProductKg) > 0.01 && (
                       <span className="text-amber-600 ml-2">
-                        (product total: {totalProductKg.toFixed(2)} kg)
+                        (product total: {formatQuantity(totalProductKg)} kg)
                       </span>
                     )}
                   </p>
