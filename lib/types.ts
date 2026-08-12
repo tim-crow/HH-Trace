@@ -68,6 +68,28 @@ export interface FinishedProduct {
   mealProteinKg: string
 }
 
+export interface RawMaterialAddData {
+  date: string
+  batchCode: string
+  quantity: number
+  supplier: string
+  status: "Field Dressed" | "Cleaned"
+  additionalInfo: string
+  storageLocation: string
+}
+
+export interface RawMaterialCleaningData {
+  date: string
+  cleaningLocation: string
+  sourceInventoryId: string
+  inputQuantity: number
+  outputBatchCode: string
+  cleanedSeedsQuantity: number
+  secondsQuantity: number
+  storageLocation: string
+  additionalInfo: string
+}
+
 export interface NavigationSection {
   title: string
   items: NavigationItem[]
@@ -115,4 +137,3 @@ export interface Order {
   lastUpdated: string
   deleted?: boolean
 }
-

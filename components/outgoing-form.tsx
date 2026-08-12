@@ -157,7 +157,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
   const getAvailableStock = React.useCallback(
     (productType: string, batchCode: string) => {
       return inventory
-        .filter((item) => item.productType === productType && item.batchCode === batchCode && !item.deleted)
+        .filter((item) => item.productType === productType && item.batchCode === batchCode && item.location === "Factory" && !item.deleted)
         .reduce((sum, item) => sum + item.quantity, 0)
     },
     [inventory]
@@ -166,7 +166,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
   const getBatchCodesForProduct = React.useCallback(
     (productType: string) => {
       const items = inventory.filter(
-        (item) => item.productType === productType && !item.deleted && item.quantity > 0
+        (item) => item.productType === productType && item.location === "Factory" && !item.deleted && item.quantity > 0
       )
       const map = new Map<string, number>()
       for (const item of items) {

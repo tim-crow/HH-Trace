@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Trash2, AlertCircle, X } from "lucide-react"
 import { HEMP_PRODUCTS, PROCESS_TYPES } from "@/lib/constants"
-import type { InventoryItem, BulkProduct, FinishedProduct, AvailableBatch, ProcessingRun } from "@/lib/types"
-import { formatQuantity } from "@/lib/utils"
+import type { InventoryItem, BulkProduct, FinishedProduct, AvailableBatch, ProcessingRun, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
+import { formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface ProcessingFormsProps {
   inventory: InventoryItem[]
@@ -25,6 +25,8 @@ interface ProcessingFormsProps {
   ) => void
   onError: (message: string) => void
   onAdditionalSubmit: () => void
+  onRawMaterialAdd: (data: RawMaterialAddData, onCommitted: () => void) => void
+  onRawMaterialCleaning: (data: RawMaterialCleaningData, onCommitted: () => void) => void
   /** When set, the form is in "edit existing run" mode and pre-fills with this run */
   editRun?: ProcessingRun | null
   onUpdate?: (
@@ -42,7 +44,7 @@ const emptyFinished = (): FinishedProduct => ({ bin: "", hearts: "", hulls: "", 
 const firstBulk = (): BulkProduct => ({ ...emptyBulk(), bag: "1" })
 const firstFinished = (): FinishedProduct => ({ ...emptyFinished(), bin: "1" })
 
-export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubmit, editRun, onUpdate, onCancelEdit }: ProcessingFormsProps) {
+export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubmit, onRawMaterialAdd, onRawMaterialCleaning, editRun, onUpdate, onCancelEdit }: ProcessingFormsProps) {
   // Per-tab state (so dehulling and pressing don't share rows when not editing)
   const [dehullBulk, setDehullBulk] = React.useState<BulkProduct[]>([firstBulk()])
   const [dehullFinished, setDehullFinished] = React.useState<FinishedProduct[]>([firstFinished()])
@@ -66,6 +68,23 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
   const [combineBatch, setCombineBatch] = React.useState("")
   const [combineNotes, setCombineNotes] = React.useState("")
   const [combineSources, setCombineSources] = React.useState<BulkProduct[]>([firstBulk(), { ...emptyBulk(), bag: "2" }])
+
+  const [rawDate, setRawDate] = React.useState("")
+  const [rawBatchCode, setRawBatchCode] = React.useState("")
+  const [rawQuantity, setRawQuantity] = React.useState("")
+  const [rawSupplier, setRawSupplier] = React.useState("")
+  const [rawStatus, setRawStatus] = React.useState<"Field Dressed" | "Cleaned">("Field Dressed")
+  const [rawInfo, setRawInfo] = React.useState("")
+  const [rawLocation, setRawLocation] = React.useState("")
+  const [cleanDate, setCleanDate] = React.useState("")
+  const [cleanLocation, setCleanLocation] = React.useState("")
+  const [cleanSourceId, setCleanSourceId] = React.useState("")
+  const [cleanInputQuantity, setCleanInputQuantity] = React.useState("")
+  const [cleanOutputBatch, setCleanOutputBatch] = React.useState("")
+  const [cleanSeedsQuantity, setCleanSeedsQuantity] = React.useState("")
+  const [cleanSecondsQuantity, setCleanSecondsQuantity] = React.useState("")
+  const [cleanStorageLocation, setCleanStorageLocation] = React.useState("")
+  const [cleanInfo, setCleanInfo] = React.useState("")
 
   const [activeTab, setActiveTab] = React.useState("dehulling")
   const isEditing = !!editRun
@@ -109,9 +128,14 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       .sort((a, b) => a.localeCompare(b)),
   [inventory])
 
+  const rawMaterialInventory = React.useMemo(() => inventory
+    .filter((item) => item.productType.startsWith("Raw Material —") && item.quantity > 0)
+    .sort((a, b) => a.batchCode.localeCompare(b.batchCode)),
+  [inventory])
+
   const getAvailableBatches = (productType: string): AvailableBatch[] => {
     if (!productType) return []
-    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", lights: "Hemp Lights", overs: "Overs" }
+    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
     const displayName = productTypeMap[productType] || productType
     return inventory
       .filter((item) => item.productType === displayName && item.quantity > 0 && item.location === "Factory")
@@ -219,6 +243,71 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       })
     }
   }
+  const handleRawMaterialAdd = () => {
+    const quantity = roundQuantity(Number.parseFloat(rawQuantity))
+    if (!rawDate || !rawBatchCode.trim() || !rawSupplier.trim() || !rawLocation.trim() || !Number.isFinite(quantity) || quantity <= 0) {
+      onError("Enter the date, source lot/batch code, positive volume, supplier and storage location.")
+      return
+    }
+    if (inventory.some((item) => item.batchCode === rawBatchCode.trim())) {
+      onError(`Batch code ${rawBatchCode.trim()} already exists. Enter a unique source lot or batch code.`)
+      return
+    }
+    onRawMaterialAdd({
+      date: rawDate,
+      batchCode: rawBatchCode.trim(),
+      quantity,
+      supplier: rawSupplier.trim(),
+      status: rawStatus,
+      additionalInfo: rawInfo.trim(),
+      storageLocation: rawLocation.trim(),
+    }, () => {
+      setRawDate(""); setRawBatchCode(""); setRawQuantity(""); setRawSupplier("")
+      setRawStatus("Field Dressed"); setRawInfo(""); setRawLocation("")
+    })
+  }
+  const handleRawMaterialCleaning = () => {
+    const source = rawMaterialInventory.find((item) => item.id === cleanSourceId)
+    const inputQuantity = roundQuantity(Number.parseFloat(cleanInputQuantity))
+    const cleanedSeedsQuantity = roundQuantity(Number.parseFloat(cleanSeedsQuantity) || 0)
+    const secondsQuantity = roundQuantity(Number.parseFloat(cleanSecondsQuantity) || 0)
+    if (!cleanDate || !cleanLocation.trim() || !source || !cleanOutputBatch.trim() || !cleanStorageLocation.trim() || !Number.isFinite(inputQuantity) || inputQuantity <= 0) {
+      onError("Enter the date, cleaning location, source batch, positive input volume, output batch and storage location.")
+      return
+    }
+    if (inventory.some((item) => item.batchCode === cleanOutputBatch.trim())) {
+      onError(`Batch code ${cleanOutputBatch.trim()} already exists. Enter a unique cleaned batch code.`)
+      return
+    }
+    if (inputQuantity > source.quantity) {
+      onError(`${source.batchCode} only has ${formatQuantity(source.quantity)} kg available.`)
+      return
+    }
+    const outputQuantity = roundQuantity(cleanedSeedsQuantity + secondsQuantity)
+    if (cleanedSeedsQuantity < 0 || secondsQuantity < 0 || outputQuantity > inputQuantity) {
+      onError("Cleaned Seeds and Seconds must be zero or greater and cannot exceed the input volume.")
+      return
+    }
+    if (outputQuantity <= 0) {
+      onError("Enter a positive quantity for Cleaned Seeds, Seconds, or both.")
+      return
+    }
+    onRawMaterialCleaning({
+      date: cleanDate,
+      cleaningLocation: cleanLocation.trim(),
+      sourceInventoryId: source.id,
+      inputQuantity,
+      outputBatchCode: cleanOutputBatch.trim(),
+      cleanedSeedsQuantity,
+      secondsQuantity,
+      storageLocation: cleanStorageLocation.trim(),
+      additionalInfo: cleanInfo.trim(),
+    }, () => {
+      setCleanDate(""); setCleanLocation(""); setCleanSourceId(""); setCleanInputQuantity("")
+      setCleanOutputBatch(""); setCleanSeedsQuantity(""); setCleanSecondsQuantity("")
+      setCleanStorageLocation(""); setCleanInfo("")
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -256,6 +345,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
           <TabsTrigger value="dehulling" disabled={isEditing && editRun?.processType !== "dehulling"}>Dehulling</TabsTrigger>
           <TabsTrigger value="pressing" disabled={isEditing && editRun?.processType !== "pressing"}>Pressing</TabsTrigger>
           <TabsTrigger value="combining" disabled={isEditing && editRun?.processType !== "combining"}>Combine Batches</TabsTrigger>
+          <TabsTrigger value="raw-materials" disabled={isEditing}>Raw Materials</TabsTrigger>
           <TabsTrigger value="additional" disabled={isEditing}>Additional</TabsTrigger>
         </TabsList>
 
@@ -345,7 +435,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 products={pressBulk}
                 onChange={setPressBulk}
                 getAvailableBatches={getAvailableBatches}
-                productOptions={[{ key: "hulled-seeds", label: "Hulled Seeds" }, { key: "lights", label: "Lights" }, { key: "overs", label: "Overs" }, { key: "whole-seeds", label: "Whole Seeds" }]}
+                productOptions={[{ key: "hulled-seeds", label: "Hulled Seeds" }, { key: "lights", label: "Lights" }, { key: "overs", label: "Overs" }, { key: "seconds", label: "Seconds" }, { key: "whole-seeds", label: "Whole Seeds" }]}
               />
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold">Finished Products (KG)</h4>
@@ -508,6 +598,74 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="raw-materials">
+          <Tabs defaultValue="add-raw-material" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="add-raw-material">Add Raw Material</TabsTrigger>
+              <TabsTrigger value="cleaning">Cleaning</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="add-raw-material">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add Raw Material</CardTitle>
+                  <CardDescription>Record externally stored material before it enters the Factory incoming-goods process</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Date *</Label><Input type="date" value={rawDate} onChange={(event) => setRawDate(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Source Lot / Batch Code *</Label><Input placeholder="e.g. JOHN-2026-01" value={rawBatchCode} onChange={(event) => setRawBatchCode(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Volume (kg) *</Label><Input type="number" min={0} step="0.1" value={rawQuantity} onChange={(event) => setRawQuantity(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Supplier *</Label><Input placeholder="Supplier or farm" value={rawSupplier} onChange={(event) => setRawSupplier(event.target.value)} /></div>
+                    <div className="space-y-2">
+                      <Label>Status *</Label>
+                      <Select value={rawStatus} onValueChange={(value) => setRawStatus(value as "Field Dressed" | "Cleaned")}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="Field Dressed">Field Dressed</SelectItem><SelectItem value="Cleaned">Cleaned</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2"><Label>Storage Location *</Label><Input placeholder="Choose or enter external facility" value={rawLocation} onChange={(event) => setRawLocation(event.target.value)} /></div>
+                  </div>
+                  <div className="space-y-2"><Label>Additional Information</Label><Textarea value={rawInfo} onChange={(event) => setRawInfo(event.target.value)} /></div>
+                  <Button onClick={handleRawMaterialAdd}>Add to Raw Material Inventory</Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="cleaning">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Raw Material Cleaning</CardTitle>
+                  <CardDescription>Deduct an externally stored source lot and create traceable Cleaned Seeds and Seconds outputs</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Date *</Label><Input type="date" value={cleanDate} onChange={(event) => setCleanDate(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Cleaning Location *</Label><Input placeholder="Cleaning facility" value={cleanLocation} onChange={(event) => setCleanLocation(event.target.value)} /></div>
+                    <div className="space-y-2">
+                      <Label>Batch In *</Label>
+                      <Select value={cleanSourceId} onValueChange={setCleanSourceId}>
+                        <SelectTrigger><SelectValue placeholder="Select raw material lot" /></SelectTrigger>
+                        <SelectContent>{rawMaterialInventory.map((item) => <SelectItem key={item.id} value={item.id}>{item.batchCode} — {item.productType.replace("Raw Material — ", "")} ({formatQuantity(item.quantity)} kg at {item.location})</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2"><Label>Input Volume (kg) *</Label><Input type="number" min={0} step="0.1" value={cleanInputQuantity} onChange={(event) => setCleanInputQuantity(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Batch Out *</Label><Input placeholder="New cleaned batch code" value={cleanOutputBatch} onChange={(event) => setCleanOutputBatch(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Output Storage Location *</Label><Input placeholder="Choose or enter facility" value={cleanStorageLocation} onChange={(event) => setCleanStorageLocation(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Cleaned Seeds Produced (kg)</Label><Input type="number" min={0} step="0.1" value={cleanSeedsQuantity} onChange={(event) => setCleanSeedsQuantity(event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Seconds Produced (kg)</Label><Input type="number" min={0} step="0.1" value={cleanSecondsQuantity} onChange={(event) => setCleanSecondsQuantity(event.target.value)} /></div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/50 p-3 text-sm">
+                    Cleaning loss: <strong>{formatQuantity(Math.max(0, (Number.parseFloat(cleanInputQuantity) || 0) - (Number.parseFloat(cleanSeedsQuantity) || 0) - (Number.parseFloat(cleanSecondsQuantity) || 0)))} kg</strong>
+                  </div>
+                  <div className="space-y-2"><Label>Additional Information</Label><Textarea value={cleanInfo} onChange={(event) => setCleanInfo(event.target.value)} /></div>
+                  <Button onClick={handleRawMaterialCleaning}>Save Cleaning Record</Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="additional">

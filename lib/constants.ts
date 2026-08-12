@@ -10,6 +10,8 @@ export const HEMP_PRODUCTS = [
   "Hemp Protein Powder (50)",
   "Hemp Protein Powder (65)",
   "Overs",
+  "Cleaned Seeds",
+  "Seconds",
   "Packaging",
 ] as const
 

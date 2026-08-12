@@ -44,7 +44,7 @@ import { AssistantChat } from "@/components/assistant-chat"
 import { formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
-import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, ProcessingRun } from "@/lib/types"
+import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, ProcessingRun, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
 
 interface PackingSlipData {
   number: string
@@ -246,12 +246,43 @@ function AppContent() {
     batchCode: string
     quantity: string
     location: string
+    sourceInventoryId?: string
   }) => {
+    const quantity = roundQuantity(Number.parseFloat(formData.quantity))
+    const source = formData.sourceInventoryId
+      ? inventory.find((item) => item.id === formData.sourceInventoryId && !item.deleted)
+      : undefined
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      showMessage("Enter a positive quantity for this receival.")
+      return false
+    }
+    const sourceProductType = source?.productType === "Raw Material — Cleaned" ? "Cleaned Seeds" : source?.productType
+    if (formData.sourceInventoryId && (
+      !source ||
+      source.location === "Factory" ||
+      !["Cleaned Seeds", "Seconds", "Raw Material — Cleaned"].includes(source.productType) ||
+      source.quantity < quantity ||
+      formData.productType !== sourceProductType ||
+      formData.batchCode !== source.batchCode ||
+      formData.location !== "Factory"
+    )) {
+      showMessage("The selected external material or its inventory details have changed. Select it again and check the available quantity.")
+      return false
+    }
+    const productType = formData.productType || "Whole Seeds"
+    const existingFactoryItems = source
+      ? inventory.filter((item) => !item.deleted && item.location === "Factory" && item.productType === productType && item.batchCode === formData.batchCode)
+      : []
+    if (existingFactoryItems.length > 1) {
+      showMessage(`${productType} batch ${formData.batchCode} has duplicate Factory inventory rows. Ask an admin to consolidate them before receiving more stock.`)
+      return false
+    }
+    const existingFactoryItem = existingFactoryItems[0]
     const newItem: InventoryItem = {
-      id: generateId("INV"),
-      productType: formData.productType || "Whole Seeds",
+      id: existingFactoryItem?.id || generateId("INV"),
+      productType,
       batchCode: formData.batchCode,
-      quantity: roundQuantity(Number.parseFloat(formData.quantity)),
+      quantity: existingFactoryItem ? roundQuantity(existingFactoryItem.quantity + quantity) : quantity,
       location: formData.location || "Factory",
       lastUpdated: new Date().toISOString(),
     }
@@ -261,16 +292,31 @@ function AppContent() {
       date: formData.date,
       productType: newItem.productType,
       batchCode: formData.batchCode,
-      quantity: newItem.quantity,
+      quantity,
       supplier: formData.supplier,
       status: "Completed",
     }
-    setInventory((prev) => [...prev, newItem])
+    setInventory((previous) => {
+      const withSourceDeducted = source
+        ? previous.map((item) => item.id === source.id ? { ...item, quantity: roundQuantity(item.quantity - quantity), lastUpdated: newItem.lastUpdated } : item)
+        : previous
+      return existingFactoryItem
+        ? withSourceDeducted.map((item) => item.id === existingFactoryItem.id ? newItem : item)
+        : [...withSourceDeducted, newItem]
+    })
     setRecords((prev) => [...prev, newRecord])
-    supabase.from('inventory').insert({ id: newItem.id, product_type: newItem.productType, batch_code: newItem.batchCode, quantity: newItem.quantity, location: newItem.location, last_updated: newItem.lastUpdated }).then()
+    if (source) {
+      supabase.from('inventory').update({ quantity: roundQuantity(source.quantity - quantity), last_updated: newItem.lastUpdated }).eq('id', source.id).then()
+    }
+    if (existingFactoryItem) {
+      supabase.from('inventory').update({ quantity: newItem.quantity, last_updated: newItem.lastUpdated }).eq('id', existingFactoryItem.id).then()
+    } else {
+      supabase.from('inventory').insert({ id: newItem.id, product_type: newItem.productType, batch_code: newItem.batchCode, quantity: newItem.quantity, location: newItem.location, last_updated: newItem.lastUpdated }).then()
+    }
     supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, supplier: newRecord.supplier, status: newRecord.status }).then()
-    logAction(user.name, user.role, "Created Receival", formData.batchCode, `${formData.productType || "Whole Seeds"} — ${formatQuantity(newItem.quantity)} kg from ${formData.supplier || "unknown supplier"} at ${formData.location || "Factory"}`)
+    logAction(user.name, user.role, "Created Receival", formData.batchCode, `${formData.productType || "Whole Seeds"} — ${formatQuantity(quantity)} kg from ${formData.supplier || "unknown supplier"} at ${formData.location || "Factory"}`)
     showMessage("Receival record added successfully!")
+    return true
   }
 
   const handleProcessingSubmit = (
@@ -336,6 +382,7 @@ function AppContent() {
         "hemp-hearts": "Hemp Hearts",
         lights: "Hemp Lights",
         overs: "Overs",
+        seconds: "Seconds",
       }
       const inputDeductions = new Map<string, number>()
       bulkProducts.forEach((product) => {
@@ -439,6 +486,132 @@ function AppContent() {
         ? `This will deduct ${formatQuantity(totalKg)} kg from the selected source batches and create batch ${formData.batchId}. The source genealogy will be saved.`
         : `This will deduct ${formatQuantity(totalKg)} kg from input batches and create finished product inventory items. This action is recorded in the audit log.`,
       onConfirm: doProcess,
+    })
+  }
+
+  const handleRawMaterialAdd = (data: RawMaterialAddData, onCommitted: () => void) => {
+    setConfirmAction({
+      title: "Add Raw Material?",
+      description: `This will add ${formatQuantity(data.quantity)} kg from ${data.supplier} as ${data.status} raw material at ${data.storageLocation}.`,
+      onConfirm: () => {
+        if (inventory.some((item) => item.batchCode === data.batchCode)) {
+          showMessage(`Batch code ${data.batchCode} already exists. Enter a unique source lot or batch code.`)
+          return
+        }
+        const now = new Date().toISOString()
+        const runId = generateId("PR")
+        const item: InventoryItem = {
+          id: generateId("INV"),
+          productType: `Raw Material — ${data.status}`,
+          batchCode: data.batchCode,
+          quantity: roundQuantity(data.quantity),
+          location: data.storageLocation,
+          lastUpdated: now,
+        }
+        const record: TransactionRecord = {
+          id: generateId("REC"),
+          type: "Processing",
+          date: data.date,
+          productType: item.productType,
+          batchCode: item.batchCode,
+          quantity: item.quantity,
+          supplier: data.supplier,
+          status: "Completed",
+          processingRunId: runId,
+        }
+        setInventory((previous) => [...previous, item])
+        setRecords((previous) => [...previous, record])
+        supabase.from('inventory').insert({ id: item.id, product_type: item.productType, batch_code: item.batchCode, quantity: item.quantity, location: item.location, last_updated: item.lastUpdated }).then()
+        supabase.from('records').insert({ id: record.id, type: record.type, date: record.date, product_type: record.productType, batch_code: record.batchCode, quantity: record.quantity, supplier: record.supplier, status: record.status, processing_run_id: runId }).then()
+        supabase.from('processing_runs').insert({
+          id: runId,
+          date: data.date,
+          batch_id: data.batchCode,
+          process_type: "raw-material-add",
+          total_input_kg: data.quantity,
+          outputs: [{ productType: item.productType, kg: item.quantity }],
+          form_data: { ...data, inventoryItemId: item.id },
+        }).then()
+        logAction(user.name, user.role, "Added Raw Material", data.batchCode, `${formatQuantity(item.quantity)} kg ${data.status} from ${data.supplier} at ${data.storageLocation}`)
+        showMessage("Raw material added to inventory successfully!")
+        onCommitted()
+      },
+    })
+  }
+
+  const handleRawMaterialCleaning = (data: RawMaterialCleaningData, onCommitted: () => void) => {
+    const source = inventory.find((item) => item.id === data.sourceInventoryId && !item.deleted)
+    if (!source) {
+      showMessage("The selected raw-material batch is no longer available.")
+      return
+    }
+    const outputTotal = roundQuantity(data.cleanedSeedsQuantity + data.secondsQuantity)
+    const cleaningLoss = roundQuantity(data.inputQuantity - outputTotal)
+    setConfirmAction({
+      title: "Confirm Raw Material Cleaning",
+      description: `This will deduct ${formatQuantity(data.inputQuantity)} kg from ${source.batchCode} and create ${formatQuantity(data.cleanedSeedsQuantity)} kg Cleaned Seeds and ${formatQuantity(data.secondsQuantity)} kg Seconds under batch ${data.outputBatchCode}. Cleaning loss: ${formatQuantity(cleaningLoss)} kg.`,
+      onConfirm: () => {
+        const currentSource = inventory.find((item) => item.id === data.sourceInventoryId && !item.deleted)
+        if (!currentSource || currentSource.quantity < data.inputQuantity) {
+          showMessage(`${source.batchCode} no longer has enough raw material for this cleaning record.`)
+          return
+        }
+        if (inventory.some((item) => item.batchCode === data.outputBatchCode)) {
+          showMessage(`Batch code ${data.outputBatchCode} already exists. Enter a unique cleaned batch code.`)
+          return
+        }
+        const now = new Date().toISOString()
+        const runId = generateId("PR")
+        const revisedSourceQuantity = roundQuantity(currentSource.quantity - data.inputQuantity)
+        const outputs: InventoryItem[] = [
+          data.cleanedSeedsQuantity > 0 ? {
+            id: generateId("INV"), productType: "Cleaned Seeds", batchCode: data.outputBatchCode,
+            quantity: roundQuantity(data.cleanedSeedsQuantity), location: data.storageLocation, lastUpdated: now,
+          } : null,
+          data.secondsQuantity > 0 ? {
+            id: generateId("INV"), productType: "Seconds", batchCode: data.outputBatchCode,
+            quantity: roundQuantity(data.secondsQuantity), location: data.storageLocation, lastUpdated: now,
+          } : null,
+        ].filter((item): item is InventoryItem => item !== null)
+        const record: TransactionRecord = {
+          id: generateId("REC"),
+          type: "Processing",
+          date: data.date,
+          productType: "Raw Material Cleaning",
+          batchCode: data.outputBatchCode,
+          quantity: roundQuantity(data.inputQuantity),
+          processor: user.name,
+          status: "Completed",
+          processingRunId: runId,
+        }
+        setInventory((previous) => [
+          ...previous.map((item) => item.id === currentSource.id ? { ...item, quantity: revisedSourceQuantity, lastUpdated: now } : item),
+          ...outputs,
+        ])
+        setRecords((previous) => [...previous, record])
+        supabase.from('inventory').update({ quantity: revisedSourceQuantity, last_updated: now }).eq('id', currentSource.id).then()
+        outputs.forEach((item) => supabase.from('inventory').insert({ id: item.id, product_type: item.productType, batch_code: item.batchCode, quantity: item.quantity, location: item.location, last_updated: item.lastUpdated }).then())
+        supabase.from('records').insert({ id: record.id, type: record.type, date: record.date, product_type: record.productType, batch_code: record.batchCode, quantity: record.quantity, processor: record.processor, status: record.status, processing_run_id: runId }).then()
+        supabase.from('processing_runs').insert({
+          id: runId,
+          date: data.date,
+          batch_id: data.outputBatchCode,
+          process_type: "raw-material-cleaning",
+          total_input_kg: data.inputQuantity,
+          outputs: outputs.map((item) => ({ productType: item.productType, kg: item.quantity })),
+          form_data: {
+            ...data,
+            sourceBatchCode: currentSource.batchCode,
+            sourceProductType: currentSource.productType,
+            sourceStorageLocation: currentSource.location,
+            cleaningLoss,
+            outputInventoryIds: outputs.map((item) => item.id),
+          },
+        }).then()
+        logAction(user.name, user.role, "Cleaned Raw Material", data.outputBatchCode, `${source.batchCode}: ${formatQuantity(data.inputQuantity)} kg input → ${formatQuantity(data.cleanedSeedsQuantity)} kg Cleaned Seeds + ${formatQuantity(data.secondsQuantity)} kg Seconds + ${formatQuantity(cleaningLoss)} kg loss at ${data.cleaningLocation}`)
+        showMessage("Raw-material cleaning record saved successfully!")
+        onCommitted()
+      },
     })
   }
 
@@ -590,6 +763,7 @@ function AppContent() {
       "hemp-hearts": "Hemp Hearts",
       lights: "Hemp Lights",
       overs: "Overs",
+      seconds: "Seconds",
     }
     const getInputTotals = (products: BulkProduct[]) => {
       const totals = new Map<string, number>()
@@ -808,7 +982,7 @@ function AppContent() {
   const renderContent = () => {
     switch (activeSection) {
       case "receival":
-        return <ReceivalForm onSubmit={handleReceivalSubmit} onError={showMessage} />
+        return <ReceivalForm inventory={activeInventory} onSubmit={handleReceivalSubmit} onError={showMessage} />
       case "processing":
         return (
           <ProcessingForms
@@ -819,6 +993,8 @@ function AppContent() {
               logAction(user.name, user.role, "Created Processing", "Additional", "Additional processing record submitted")
               showMessage("Additional processing record saved!")
             }}
+            onRawMaterialAdd={handleRawMaterialAdd}
+            onRawMaterialCleaning={handleRawMaterialCleaning}
             editRun={editingProcessingRun}
             onUpdate={handleProcessingRunUpdate}
             onCancelEdit={() => { setEditingProcessingRun(null); setActiveSection("records") }}
@@ -848,7 +1024,8 @@ function AppContent() {
               const matches = inventory.filter((candidate) =>
                 !candidate.deleted &&
                 candidate.productType === outgoing.productType &&
-                candidate.batchCode === outgoing.batchCode
+                candidate.batchCode === outgoing.batchCode &&
+                candidate.location === "Factory"
               )
               if (matches.length > 1) {
                 showMessage(`${outgoing.productType} batch ${outgoing.batchCode} has duplicate inventory rows. Ask an admin to consolidate them before dispatch.`)

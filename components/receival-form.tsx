@@ -11,6 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { HEMP_PRODUCTS, LOCATIONS } from "@/lib/constants"
 import { getSuppliers, saveSupplier, getOtherLocations, saveOtherLocation } from "@/lib/remembered-entries"
+import type { InventoryItem } from "@/lib/types"
+import { formatQuantity } from "@/lib/utils"
 
 interface ReceivalFormData {
   date: string
@@ -20,14 +22,16 @@ interface ReceivalFormData {
   quantity: string
   location: string
   notes: string
+  sourceInventoryId?: string
 }
 
 interface ReceivalFormProps {
-  onSubmit: (data: ReceivalFormData) => void
+  onSubmit: (data: ReceivalFormData) => boolean
   onError: (message: string) => void
+  inventory: InventoryItem[]
 }
 
-export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
+export function ReceivalForm({ onSubmit, onError, inventory }: ReceivalFormProps) {
   const [form, setForm] = React.useState<ReceivalFormData>({
     date: "",
     supplier: "",
@@ -41,6 +45,17 @@ export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
   const [locationType, setLocationType] = React.useState("")
   const [otherLocation, setOtherLocation] = React.useState("")
   const [savedLocations, setSavedLocations] = React.useState<string[]>([])
+  const [sourceInventoryId, setSourceInventoryId] = React.useState("")
+
+  const approvedExternalMaterials = React.useMemo(() => inventory
+    .filter((item) =>
+      !item.deleted &&
+      item.location !== "Factory" &&
+      item.quantity > 0 &&
+      ["Cleaned Seeds", "Seconds", "Raw Material — Cleaned"].includes(item.productType)
+    )
+    .sort((a, b) => a.batchCode.localeCompare(b.batchCode)),
+  [inventory])
 
   React.useEffect(() => {
     setSuppliers(getSuppliers())
@@ -79,10 +94,12 @@ export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
       saveOtherLocation(otherLocation)
       setSavedLocations(getOtherLocations())
     }
-    onSubmit({ ...form, location: finalLocation })
+    const submitted = onSubmit({ ...form, location: finalLocation, sourceInventoryId: sourceInventoryId || undefined })
+    if (!submitted) return
     setForm({ date: "", supplier: "", productType: "", batchCode: "", quantity: "", location: "", notes: "" })
     setLocationType("")
     setOtherLocation("")
+    setSourceInventoryId("")
   }
 
   return (
@@ -97,6 +114,52 @@ export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
           <CardDescription>Record details of received hemp products</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          {approvedExternalMaterials.length > 0 && (
+            <div className="space-y-2 rounded-lg border bg-muted/40 p-4">
+              <Label>Receive Approved External Material (optional)</Label>
+              <Select
+                value={sourceInventoryId}
+                onValueChange={(id) => {
+                  setSourceInventoryId(id)
+                  const source = approvedExternalMaterials.find((item) => item.id === id)
+                  if (!source) return
+                  setForm((previous) => ({
+                    ...previous,
+                    productType: source.productType === "Raw Material — Cleaned" ? "Cleaned Seeds" : source.productType,
+                    batchCode: source.batchCode,
+                    quantity: String(source.quantity),
+                    location: "Factory",
+                  }))
+                  setLocationType("Factory")
+                  setOtherLocation("")
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select cleaned material from external storage" /></SelectTrigger>
+                <SelectContent>
+                  {approvedExternalMaterials.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.productType.replace("Raw Material — ", "")} — {item.batchCode} ({formatQuantity(item.quantity)} kg at {item.location})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {sourceInventoryId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSourceInventoryId("")
+                    setForm((previous) => ({ ...previous, productType: "", batchCode: "", quantity: "", location: "" }))
+                    setLocationType("")
+                  }}
+                >
+                  Clear external material selection
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">Submitting Incoming Goods transfers the received quantity into Factory inventory and leaves any balance at external storage.</p>
+            </div>
+          )}
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="receival-date">Date of Receival *</Label>
@@ -110,7 +173,7 @@ export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Product Type</Label>
-              <Select value={form.productType} onValueChange={(v) => updateField("productType", v)}>
+              <Select value={form.productType} onValueChange={(v) => updateField("productType", v)} disabled={!!sourceInventoryId}>
                 <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
                 <SelectContent>
                   {HEMP_PRODUCTS.map((product) => (
@@ -121,7 +184,7 @@ export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="batch-code">Batch Code *</Label>
-              <Input id="batch-code" placeholder="Enter batch code" value={form.batchCode} onChange={(e) => updateField("batchCode", e.target.value)} />
+              <Input id="batch-code" placeholder="Enter batch code" value={form.batchCode} onChange={(e) => updateField("batchCode", e.target.value)} disabled={!!sourceInventoryId} />
             </div>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
@@ -131,7 +194,7 @@ export function ReceivalForm({ onSubmit, onError }: ReceivalFormProps) {
             </div>
             <div className="space-y-2">
               <Label>Storage Location</Label>
-              <Select value={locationType} onValueChange={handleLocationTypeChange}>
+              <Select value={locationType} onValueChange={handleLocationTypeChange} disabled={!!sourceInventoryId}>
                 <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
                 <SelectContent>
                   {LOCATIONS.map((location) => (

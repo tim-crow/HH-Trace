@@ -67,7 +67,9 @@ export function RecordsTable({ records, isAdmin, onRecordUpdate, onOpenProcessin
   const canEdit = (record: TransactionRecord) => {
     // Operators + admins can edit Processing records
     // Only admins can edit all other types
-    if (record.type === "Processing") return true
+    if (record.type === "Processing") {
+      return !record.productType.startsWith("Raw Material")
+    }
     return !!isAdmin
   }
 
