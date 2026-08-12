@@ -50,6 +50,11 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
     return totals
   }, [inventory])
 
+  const rawMaterialTotal = React.useMemo(() => inventory
+    .filter((item) => item.productType.startsWith("Raw Material —"))
+    .reduce((total, item) => total + item.quantity, 0),
+  [inventory])
+
   const inventoryGroups = React.useMemo(() => {
     const groups = new Map<string, InventoryItem[]>()
     filteredInventory.forEach((item) => {
@@ -58,12 +63,19 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
       groups.set(item.productType, items)
     })
     return [...groups.entries()]
-      .sort(([productA], [productB]) => productA.localeCompare(productB))
+      .sort(([productA], [productB]) => {
+        const productARaw = productA.startsWith("Raw Material —")
+        const productBRaw = productB.startsWith("Raw Material —")
+        if (productARaw !== productBRaw) return productARaw ? 1 : -1
+        return productA.localeCompare(productB)
+      })
       .map(([productType, items]) => ({
         productType,
         items: items.sort((a, b) => a.batchCode.localeCompare(b.batchCode)),
       }))
   }, [filteredInventory])
+
+  const firstRawMaterialGroup = inventoryGroups.findIndex(({ productType }) => productType.startsWith("Raw Material —"))
 
   const handleEdit = (item: InventoryItem) => {
     if (!isAdmin) return
@@ -138,12 +150,22 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
               </TableRow>
             </TableHeader>
             <TableBody>
-              {inventoryGroups.map(({ productType, items }) => (
+              {inventoryGroups.map(({ productType, items }, groupIndex) => (
                 <React.Fragment key={productType}>
+                  {groupIndex === firstRawMaterialGroup && (
+                    <TableRow className="border-t-4 border-t-background bg-primary/10 hover:bg-primary/10">
+                      <TableCell colSpan={5} className="py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-bold">Raw Materials</span>
+                          <Badge variant="secondary">{formatQuantity(rawMaterialTotal)} kg total</Badge>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
                   <TableRow className="bg-muted/60 hover:bg-muted/60">
                     <TableCell colSpan={5} className="py-3">
                       <div className="flex items-center gap-3">
-                        <span className="text-base font-semibold">{productType}</span>
+                        <span className="text-base font-semibold">{productType.replace("Raw Material — ", "")}</span>
                         <Badge variant="secondary">
                           {formatQuantity(productTotals.get(productType) || 0)} kg total
                         </Badge>
