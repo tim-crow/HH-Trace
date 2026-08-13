@@ -98,7 +98,7 @@ export const SAMPLE_ORDERS_DATA: import("@/lib/types").Order[] = [
     details: "Hemp Protein Cake 100kg",
     dateReceived: "2026-03-03",
     dueDate: "2026-03-10",
-    status: "Packed",
+    status: "Ready to Ship",
     createdBy: "Thomas",
     lastUpdatedBy: "Sarah",
     lastUpdated: "2026-03-06T14:20:00Z",

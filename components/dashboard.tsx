@@ -30,9 +30,8 @@ const statusVariant = (status: OrderStatus): "default" | "secondary" | "warning"
   switch (status) {
     case "New": return "secondary"
     case "In Progress": return "warning"
-    case "Packed": return "default"
+    case "Ready to Ship": return "default"
     case "Dispatched": return "success"
-    case "Completed": return "success"
     default: return "secondary"
   }
 }
@@ -40,7 +39,7 @@ const statusVariant = (status: OrderStatus): "default" | "secondary" | "warning"
 export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
   const today = new Date().toISOString().split("T")[0]
   const activeOrders = orders.filter((o) => !o.deleted)
-  const openOrders = activeOrders.filter((o) => !["Dispatched", "Completed"].includes(o.status))
+  const openOrders = activeOrders.filter((o) => o.status !== "Dispatched")
   const overdueOrders = openOrders.filter((o) => o.dueDate < today)
   const totalKg = inventory.reduce((sum, item) => sum + item.quantity, 0)
   const todayUpdated = inventory.filter((item) => item.lastUpdated.startsWith(today)).length

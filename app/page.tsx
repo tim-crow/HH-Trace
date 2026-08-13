@@ -44,7 +44,7 @@ import { AssistantChat } from "@/components/assistant-chat"
 import { formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
-import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, ProcessingRun, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
+import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, OrderStatus, ProcessingRun, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
 
 interface PackingSlipData {
   number: string
@@ -53,6 +53,13 @@ interface PackingSlipData {
   customer: string
   address: string
   products: { productType: string; batchCode: string; weight: number }[]
+}
+
+function normalizeOrderStatus(status: string): OrderStatus {
+  if (status === "Packed") return "Ready to Ship"
+  if (status === "Completed") return "Dispatched"
+  if (["New", "In Progress", "Ready to Ship", "Dispatched"].includes(status)) return status as OrderStatus
+  return "New"
 }
 
 function normalizeBulkProductQuantities(products: BulkProduct[]) {
@@ -192,10 +199,12 @@ function AppContent() {
         dateReceived: r.date_received, dueDate: r.due_date,
         freight: r.freight, freightCarrier: r.freight_carrier,
         notes: r.notes || "",
-        status: r.status, createdBy: r.created_by, lastUpdatedBy: r.last_updated_by,
+        status: normalizeOrderStatus(r.status), createdBy: r.created_by, lastUpdatedBy: r.last_updated_by,
         lastUpdated: r.last_updated, deleted: r.deleted,
       })))
     })
+    supabase.from('orders').update({ status: "Ready to Ship" }).eq('status', 'Packed').then()
+    supabase.from('orders').update({ status: "Dispatched" }).eq('status', 'Completed').then()
     loadAllSavedEntries()
   }, [])
   const [message, setMessage] = React.useState("")
@@ -204,7 +213,7 @@ function AppContent() {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [confirmAction, setConfirmAction] = React.useState<{ title: string; description: string; onConfirm: () => void } | null>(null)
 
-  // Auto-revert: if the user moved an order to "Packed" (which redirected to the
+  // Auto-revert: if the user moved an order to "Ready to Ship" (which redirected to the
   // Outgoing form) but then navigated away without submitting a dispatch record,
   // put the order back at "In Progress".
   const prevActiveSection = React.useRef(activeSection)
@@ -222,7 +231,7 @@ function AppContent() {
       )
       supabase.from('orders').update({ status: prevStatus, last_updated: now }).eq('id', orderId).then()
       if (user && reverted) {
-        logAction(user.name, user.role, "Reverted Order Status", reverted.orderNumber, `Packed → ${prevStatus} — no outgoing dispatch was submitted`)
+        logAction(user.name, user.role, "Reverted Order Status", reverted.orderNumber, `Ready to Ship → ${prevStatus} — no outgoing dispatch was submitted`)
         setMessage(`Order ${reverted.orderNumber} reverted to ${prevStatus} — no dispatch record was submitted.`)
         setMessageOpen(true)
       }
@@ -1109,8 +1118,8 @@ function AppContent() {
             userName={user.name}
             onAuditLog={(action, target, details) => logAction(user.name, user.role, action, target, details)}
             onMessage={showMessage}
-            onPackedForOutgoing={(order) => {
-              // The order was just moved to "Packed". If the user navigates away from
+            onReadyToShipForOutgoing={(order) => {
+              // The order was just moved to "Ready to Ship". If the user navigates away from
               // Outgoing without submitting a dispatch record we'll revert it back to
               // "In Progress" (handled by the useEffect below).
               setOutgoingPrefill({

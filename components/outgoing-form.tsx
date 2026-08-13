@@ -58,7 +58,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
   const [savedFreight, setSavedFreight] = React.useState(getFreightCompanies())
 
   const openOrders = React.useMemo(
-    () => orders.filter((o) => !o.deleted && o.status !== "Completed"),
+    () => orders.filter((o) => !o.deleted && o.status !== "Dispatched"),
     [orders]
   )
 

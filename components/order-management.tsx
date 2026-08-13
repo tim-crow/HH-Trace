@@ -53,15 +53,15 @@ function formatItemSummary(item: { productType: string; quantity: number; units?
   return `${item.productType} ${formatQuantity(item.quantity)}kg`
 }
 
-const ORDER_STATUSES: OrderStatus[] = ["New", "In Progress", "Packed", "Dispatched", "Completed"]
+const ORDER_STATUSES: OrderStatus[] = ["New", "In Progress", "Ready to Ship", "Dispatched"]
+const STATUS_ORDER: Record<OrderStatus, number> = { "New": 0, "In Progress": 1, "Ready to Ship": 2, "Dispatched": 3 }
 
 const statusVariant = (status: OrderStatus): "default" | "secondary" | "warning" | "success" | "destructive" => {
   switch (status) {
     case "New": return "secondary"
     case "In Progress": return "warning"
-    case "Packed": return "default"
+    case "Ready to Ship": return "default"
     case "Dispatched": return "success"
-    case "Completed": return "success"
     default: return "secondary"
   }
 }
@@ -73,10 +73,10 @@ interface OrderManagementProps {
   userName: string
   onAuditLog: (action: string, target: string, details: string) => void
   onMessage: (msg: string) => void
-  onPackedForOutgoing: (order: Order) => void
+  onReadyToShipForOutgoing: (order: Order) => void
 }
 
-export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onAuditLog, onMessage, onPackedForOutgoing }: OrderManagementProps) {
+export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onAuditLog, onMessage, onReadyToShipForOutgoing }: OrderManagementProps) {
   const [filter, setFilter] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<string>("open")
   const [viewOrder, setViewOrder] = React.useState<Order | null>(null)
@@ -95,14 +95,13 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
       order.orderNumber.toLowerCase().includes(filter.toLowerCase()) ||
       order.customer.toLowerCase().includes(filter.toLowerCase()) ||
       order.details.toLowerCase().includes(filter.toLowerCase())
-    const matchesStatus = statusFilter === "all" || (statusFilter === "open" ? order.status !== "Completed" : order.status === statusFilter)
+    const matchesStatus = statusFilter === "all" || (statusFilter === "open" ? order.status !== "Dispatched" : order.status === statusFilter)
     return matchesSearch && matchesStatus
   })
 
-  const openCount = activeOrders.filter((o) => o.status !== "Completed" && o.status !== "Dispatched").length
+  const openCount = activeOrders.filter((o) => o.status !== "Dispatched").length
   const sorted = [...filtered].sort((a, b) => {
-    const statusOrder = { "New": 0, "In Progress": 1, "Packed": 2, "Dispatched": 3, "Completed": 4 }
-    return statusOrder[a.status] - statusOrder[b.status] || a.dueDate.localeCompare(b.dueDate)
+    return STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.dueDate.localeCompare(b.dueDate)
   })
 
   const handleStatusUpdate = (order: Order, newStatus: OrderStatus) => {
@@ -112,8 +111,8 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
     ))
     onAuditLog("Updated Order Status", order.orderNumber, `${order.status} → ${newStatus} for ${order.customer}`)
     onMessage(`Order ${order.orderNumber} updated to ${newStatus}`)
-    if (newStatus === "Packed") {
-      onPackedForOutgoing(updatedOrder)
+    if (newStatus === "Ready to Ship") {
+      onReadyToShipForOutgoing(updatedOrder)
     }
   }
 
@@ -179,7 +178,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
   }
 
   const handlePrint = (order: Order) => {
-    const isOverdue = order.dueDate < new Date().toISOString().split("T")[0] && !["Dispatched", "Completed"].includes(order.status)
+    const isOverdue = order.dueDate < new Date().toISOString().split("T")[0] && order.status !== "Dispatched"
     const win = window.open("", "_blank")
     if (!win) return
     win.document.write(`<!DOCTYPE html><html><head><title>Order ${order.orderNumber}</title>
@@ -253,17 +252,16 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
   const handleExportPdf = (mode: "open" | "all") => {
     const today = new Date().toISOString().split("T")[0]
     const exportOrders = mode === "open"
-      ? activeOrders.filter((o) => o.status !== "Completed")
+      ? activeOrders.filter((o) => o.status !== "Dispatched")
       : activeOrders
     const sortedExport = [...exportOrders].sort((a, b) => {
-      const statusOrder = { "New": 0, "In Progress": 1, "Packed": 2, "Dispatched": 3, "Completed": 4 }
-      return statusOrder[a.status] - statusOrder[b.status] || a.dueDate.localeCompare(b.dueDate)
+      return STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.dueDate.localeCompare(b.dueDate)
     })
     if (sortedExport.length === 0) { onMessage("No orders to export"); return }
     const win = window.open("", "_blank")
     if (!win) return
     const orderPages = sortedExport.map((order) => {
-      const isOverdue = order.dueDate < today && !["Dispatched", "Completed"].includes(order.status)
+      const isOverdue = order.dueDate < today && order.status !== "Dispatched"
       return `<div class="page">
         <div class="header">
           <div class="logo">Hemp Harvests<span>Order Sheet</span></div>
@@ -341,8 +339,8 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
     if (isAdmin) return ORDER_STATUSES
     switch (current) {
       case "New": return ["In Progress"]
-      case "In Progress": return ["Packed"]
-      case "Packed": return ["Dispatched"]
+      case "In Progress": return ["Ready to Ship"]
+      case "Ready to Ship": return ["Dispatched"]
       default: return []
     }
   }
@@ -402,7 +400,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
             </TableHeader>
             <TableBody>
               {sorted.map((order) => {
-                const isOverdue = order.dueDate < new Date().toISOString().split("T")[0] && !["Dispatched", "Completed"].includes(order.status)
+                const isOverdue = order.dueDate < new Date().toISOString().split("T")[0] && order.status !== "Dispatched"
                 const nextStatuses = getNextStatuses(order.status)
 
                 return (

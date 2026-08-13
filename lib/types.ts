@@ -107,7 +107,7 @@ export interface AvailableBatch {
   location: string
 }
 
-export type OrderStatus = "New" | "In Progress" | "Packed" | "Dispatched" | "Completed"
+export type OrderStatus = "New" | "In Progress" | "Ready to Ship" | "Dispatched"
 
 export type FreightMethod = "Courier" | "Auspost" | "Bulk"
 
