@@ -39,11 +39,14 @@ export interface ProcessingRun {
   id: string
   date: string
   batchId: string
-  processType: "dehulling" | "pressing" | "combining"
+  processType: "dehulling" | "pressing" | "milling" | "combining"
   staffCount: string
   staffNames: string
   notes: string
   oilPressType?: string
+  millingRoute?: "protein-65" | "protein-50" | "meal-flour"
+  equipment?: string
+  sieveDetails?: string
   bulkProducts: BulkProduct[]
   finishedProducts: FinishedProduct[]
   totalInputKg: number
@@ -66,6 +69,10 @@ export interface FinishedProduct {
   oil: string
   mealProtein: string
   mealProteinKg: string
+  protein50: string
+  protein65: string
+  fibreMeal: string
+  mealFlour: string
 }
 
 export interface RawMaterialAddData {

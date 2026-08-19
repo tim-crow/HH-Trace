@@ -7,6 +7,8 @@ export const HEMP_PRODUCTS = [
   "Hemp Oil (Filtered)",
   "Hemp Meal Cake",
   "Hemp Protein Cake",
+  "Hemp Meal Flour",
+  "Hemp Fibre Meal",
   "Hemp Protein Powder (50)",
   "Hemp Protein Powder (65)",
   "Overs",
@@ -27,7 +29,7 @@ export const FINISHED_GOODS = [
   "Protein Powder 65 15kg",
 ] as const
 
-export const PROCESS_TYPES = ["Milled", "Blended", "Filtered", "Packed"] as const
+export const PROCESS_TYPES = ["Blended", "Filtered", "Packed"] as const
 
 export const LOCATIONS = ["Factory", "Other"] as const
 

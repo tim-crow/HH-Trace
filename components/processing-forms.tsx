@@ -17,7 +17,7 @@ import { formatQuantity, roundQuantity } from "@/lib/utils"
 interface ProcessingFormsProps {
   inventory: InventoryItem[]
   onSubmit: (
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string },
+    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -31,7 +31,7 @@ interface ProcessingFormsProps {
   editRun?: ProcessingRun | null
   onUpdate?: (
     runId: string,
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string },
+    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -40,7 +40,7 @@ interface ProcessingFormsProps {
 }
 
 const emptyBulk = (): BulkProduct => ({ bag: "", productType: "", kg: "", batchCode: "", notes: "" })
-const emptyFinished = (): FinishedProduct => ({ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "" })
+const emptyFinished = (): FinishedProduct => ({ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "", protein50: "", protein65: "", fibreMeal: "", mealFlour: "" })
 const firstBulk = (): BulkProduct => ({ ...emptyBulk(), bag: "1" })
 const firstFinished = (): FinishedProduct => ({ ...emptyFinished(), bin: "1" })
 
@@ -62,6 +62,17 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
   const [pressStaffNames, setPressStaffNames] = React.useState("")
   const [pressNotes, setPressNotes] = React.useState("")
   const [pressOilType, setPressOilType] = React.useState("")
+
+  const [millingBulk, setMillingBulk] = React.useState<BulkProduct[]>([firstBulk()])
+  const [millingFinished, setMillingFinished] = React.useState<FinishedProduct[]>([firstFinished()])
+  const [millingDate, setMillingDate] = React.useState("")
+  const [millingBatch, setMillingBatch] = React.useState("")
+  const [millingStaffCount, setMillingStaffCount] = React.useState("")
+  const [millingStaffNames, setMillingStaffNames] = React.useState("")
+  const [millingNotes, setMillingNotes] = React.useState("")
+  const [millingRoute, setMillingRoute] = React.useState("")
+  const [millingEquipment, setMillingEquipment] = React.useState("")
+  const [millingSieveDetails, setMillingSieveDetails] = React.useState("")
 
   const [combineDate, setCombineDate] = React.useState("")
   const [combineProductType, setCombineProductType] = React.useState("")
@@ -111,6 +122,18 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       setPressOilType(editRun.oilPressType || "")
       setPressBulk(editRun.bulkProducts.length ? editRun.bulkProducts.map((p) => ({ ...p })) : [emptyBulk()])
       setPressFinished(editRun.finishedProducts.length ? editRun.finishedProducts.map((p) => ({ ...p })) : [emptyFinished()])
+    } else if (editRun.processType === "milling") {
+      setActiveTab("milling")
+      setMillingDate(editRun.date)
+      setMillingBatch(editRun.batchId)
+      setMillingStaffCount(editRun.staffCount)
+      setMillingStaffNames(editRun.staffNames)
+      setMillingNotes(editRun.notes)
+      setMillingRoute(editRun.millingRoute || "")
+      setMillingEquipment(editRun.equipment || "")
+      setMillingSieveDetails(editRun.sieveDetails || "")
+      setMillingBulk(editRun.bulkProducts.length ? editRun.bulkProducts.map((p) => ({ ...p })) : [emptyBulk()])
+      setMillingFinished(editRun.finishedProducts.length ? editRun.finishedProducts.map((p) => ({ ...p })) : [emptyFinished()])
     } else if (editRun.processType === "combining") {
       setActiveTab("combining")
       setCombineDate(editRun.date)
@@ -135,7 +158,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
 
   const getAvailableBatches = (productType: string): AvailableBatch[] => {
     if (!productType) return []
-    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
+    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", "hemp-meal-cake": "Hemp Meal Cake", "hemp-protein-cake": "Hemp Protein Cake", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
     const displayName = productTypeMap[productType] || productType
     return inventory
       .filter((item) => item.productType === displayName && item.quantity > 0 && item.location === "Factory")
@@ -184,6 +207,76 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       onSubmit(formData, "pressing", pressBulk, pressFinished)
       setPressDate(""); setPressBatch(""); setPressStaffCount(""); setPressStaffNames(""); setPressNotes(""); setPressOilType("")
       setPressBulk([firstBulk()]); setPressFinished([firstFinished()])
+    }
+  }
+  const handleMillingSubmit = () => {
+    if (!millingDate || !millingBatch.trim() || !millingStaffNames.trim() || !millingRoute || !millingEquipment.trim() || Number.parseInt(millingStaffCount, 10) <= 0) {
+      onError("Enter the date, output batch, processing route, equipment and staff details.")
+      return
+    }
+    if (millingRoute === "protein-50" && !millingSieveDetails.trim()) {
+      onError("Enter the sieve or screen identification for the Protein 50 route.")
+      return
+    }
+    const completedInputs = millingBulk.filter((product) => product.batchCode && Number.parseFloat(product.kg) > 0)
+    if (!completedInputs.length || completedInputs.length !== millingBulk.length) {
+      onError("Every milling input row must have a product, source batch and quantity greater than zero.")
+      return
+    }
+    const requiredInputType = millingRoute === "protein-65" ? "hemp-protein-cake" : "hemp-meal-cake"
+    if (completedInputs.some((product) => product.productType !== requiredInputType)) {
+      onError(`${millingRoute === "protein-65" ? "Protein 65" : "This route"} requires ${millingRoute === "protein-65" ? "Hemp Protein Cake" : "Hemp Meal Cake"} input.`)
+      return
+    }
+    if (!validateFactoryStock(completedInputs)) return
+    const outputs = millingFinished[0]
+    const protein65Quantity = roundQuantity(Number.parseFloat(outputs.protein65 || "0") || 0)
+    const protein50Quantity = roundQuantity(Number.parseFloat(outputs.protein50 || "0") || 0)
+    const fibreMealQuantity = roundQuantity(Number.parseFloat(outputs.fibreMeal || "0") || 0)
+    const mealFlourQuantity = roundQuantity(Number.parseFloat(outputs.mealFlour || "0") || 0)
+    const outputQuantity = roundQuantity(millingRoute === "protein-65" ? protein65Quantity
+      : millingRoute === "meal-flour" ? mealFlourQuantity
+        : protein50Quantity + fibreMealQuantity)
+    const inputQuantity = roundQuantity(completedInputs.reduce((total, product) => total + Number.parseFloat(product.kg), 0))
+    if (
+      (millingRoute === "protein-65" && protein65Quantity <= 0) ||
+      (millingRoute === "meal-flour" && mealFlourQuantity <= 0) ||
+      (millingRoute === "protein-50" && (protein50Quantity <= 0 || fibreMealQuantity <= 0))
+    ) {
+      onError(millingRoute === "protein-50"
+        ? "Enter positive quantities for both Protein Powder 50 and Fibre Meal."
+        : "Enter a positive finished-product quantity.")
+      return
+    }
+    if (outputQuantity > inputQuantity) {
+      onError(`Outputs cannot exceed the ${formatQuantity(inputQuantity)} kg input quantity.`)
+      return
+    }
+    const outputProductTypes = millingRoute === "protein-65" ? ["Hemp Protein Powder (65)"]
+      : millingRoute === "meal-flour" ? ["Hemp Meal Flour"]
+        : ["Hemp Protein Powder (50)", "Hemp Fibre Meal"]
+    if (!isEditing && inventory.some((item) => !item.deleted && item.batchCode === millingBatch.trim() && outputProductTypes.includes(item.productType))) {
+      onError(`Output batch ${millingBatch.trim()} already exists for this product. Edit the existing run or use a new output batch code.`)
+      return
+    }
+    const formData = {
+      date: millingDate,
+      batchId: millingBatch.trim(),
+      staffCount: millingStaffCount,
+      staffNames: millingStaffNames.trim(),
+      notes: millingNotes,
+      millingRoute,
+      equipment: millingEquipment.trim(),
+      sieveDetails: millingSieveDetails.trim(),
+    }
+    if (isEditing && editRun && onUpdate) {
+      onUpdate(editRun.id, formData, "milling", completedInputs, millingFinished)
+    } else {
+      onSubmit(formData, "milling", completedInputs, millingFinished, () => {
+        setMillingDate(""); setMillingBatch(""); setMillingStaffCount(""); setMillingStaffNames("")
+        setMillingNotes(""); setMillingRoute(""); setMillingEquipment(""); setMillingSieveDetails("")
+        setMillingBulk([firstBulk()]); setMillingFinished([firstFinished()])
+      })
     }
   }
   const handleCombiningSubmit = () => {
@@ -309,6 +402,13 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
     })
   }
 
+  const millingInputQuantity = roundQuantity(millingBulk.reduce((total, product) => total + (Number.parseFloat(product.kg) || 0), 0))
+  const millingOutputQuantity = roundQuantity(
+    millingRoute === "protein-65" ? (Number.parseFloat(millingFinished[0]?.protein65) || 0)
+      : millingRoute === "meal-flour" ? (Number.parseFloat(millingFinished[0]?.mealFlour) || 0)
+        : (Number.parseFloat(millingFinished[0]?.protein50) || 0) + (Number.parseFloat(millingFinished[0]?.fibreMeal) || 0)
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -319,7 +419,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
           <p className="text-muted-foreground">
             {isEditing
               ? `Editing run ${editRun?.batchId} (${editRun?.processType}) — adjust any field including bin numbers, bag numbers, staff and yields`
-              : "Record dehulling, pressing and additional processing activities"}
+              : "Record dehulling, pressing, milling, sieving and additional processing activities"}
           </p>
         </div>
         {isEditing && onCancelEdit && (
@@ -344,6 +444,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
         <TabsList>
           <TabsTrigger value="dehulling" disabled={isEditing && editRun?.processType !== "dehulling"}>Dehulling</TabsTrigger>
           <TabsTrigger value="pressing" disabled={isEditing && editRun?.processType !== "pressing"}>Pressing</TabsTrigger>
+          <TabsTrigger value="milling" disabled={isEditing && editRun?.processType !== "milling"}>Milling / Sieving</TabsTrigger>
           <TabsTrigger value="combining" disabled={isEditing && editRun?.processType !== "combining"}>Combine Batches</TabsTrigger>
           <TabsTrigger value="raw-materials" disabled={isEditing}>Raw Materials</TabsTrigger>
           <TabsTrigger value="additional" disabled={isEditing}>Additional</TabsTrigger>
@@ -470,6 +571,85 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
               <Button onClick={handlePressingSubmit}>
                 {isEditing ? "Update Pressing Record" : "Submit Pressing Record"}
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="milling">
+          <Card>
+            <CardHeader>
+              <CardTitle>Milling / Sieving Processing Form</CardTitle>
+              <CardDescription>Record cake-to-powder processing, batch genealogy, co-products and material reconciliation</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Date *</Label><Input type="date" value={millingDate} onChange={(event) => setMillingDate(event.target.value)} /></div>
+                <div className="space-y-2"><Label>Output Batch Code *</Label><Input placeholder="Enter finished batch code" value={millingBatch} onChange={(event) => setMillingBatch(event.target.value)} /></div>
+              </div>
+              <div className="space-y-2">
+                <Label>Processing Route *</Label>
+                <Select
+                  value={millingRoute}
+                  disabled={isEditing}
+                  onValueChange={(route) => {
+                    setMillingRoute(route)
+                    setMillingSieveDetails("")
+                    const inputType = route === "protein-65" ? "hemp-protein-cake" : "hemp-meal-cake"
+                    setMillingBulk((products) => products.map((product) => ({ ...product, productType: inputType, batchCode: "", kg: "" })))
+                    setMillingFinished([firstFinished()])
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select milling route" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="protein-65">Protein 65 — Milling Only</SelectItem>
+                    <SelectItem value="protein-50">Protein 50 — Milling and Sieving</SelectItem>
+                    <SelectItem value="meal-flour">Meal Flour — Milling Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Number of Staff *</Label><Input type="number" min={1} value={millingStaffCount} onChange={(event) => setMillingStaffCount(event.target.value)} /></div>
+                <div className="space-y-2"><Label>Names of Staff *</Label><Input placeholder="Enter staff names" value={millingStaffNames} onChange={(event) => setMillingStaffNames(event.target.value)} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Mill / Equipment ID *</Label><Input placeholder="Equipment name or identifier" value={millingEquipment} onChange={(event) => setMillingEquipment(event.target.value)} /></div>
+                {millingRoute === "protein-50" && (
+                  <div className="space-y-2"><Label>Sieve / Screen ID *</Label><Input placeholder="Sieve or screen identification" value={millingSieveDetails} onChange={(event) => setMillingSieveDetails(event.target.value)} /></div>
+                )}
+              </div>
+              <BulkProductSection
+                products={millingBulk}
+                onChange={setMillingBulk}
+                getAvailableBatches={getAvailableBatches}
+                productOptions={millingRoute === "protein-65"
+                  ? [{ key: "hemp-protein-cake", label: "Hemp Protein Cake" }]
+                  : millingRoute ? [{ key: "hemp-meal-cake", label: "Hemp Meal Cake" }] : []}
+              />
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold">Finished Products (KG)</h4>
+                <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/50 p-4">
+                  {millingRoute === "protein-65" && (
+                    <div className="space-y-2"><Label>Hemp Protein Powder 65 *</Label><Input type="number" min={0} step="0.1" value={millingFinished[0].protein65} onChange={(event) => updateFinished(setMillingFinished, 0, "protein65", event.target.value)} /></div>
+                  )}
+                  {millingRoute === "protein-50" && (
+                    <>
+                      <div className="space-y-2"><Label>Hemp Protein Powder 50 *</Label><Input type="number" min={0} step="0.1" value={millingFinished[0].protein50} onChange={(event) => updateFinished(setMillingFinished, 0, "protein50", event.target.value)} /></div>
+                      <div className="space-y-2"><Label>Hemp Fibre Meal *</Label><Input type="number" min={0} step="0.1" value={millingFinished[0].fibreMeal} onChange={(event) => updateFinished(setMillingFinished, 0, "fibreMeal", event.target.value)} /></div>
+                    </>
+                  )}
+                  {millingRoute === "meal-flour" && (
+                    <div className="space-y-2"><Label>Hemp Meal Flour *</Label><Input type="number" min={0} step="0.1" value={millingFinished[0].mealFlour} onChange={(event) => updateFinished(setMillingFinished, 0, "mealFlour", event.target.value)} /></div>
+                  )}
+                  {!millingRoute && <p className="col-span-2 text-sm text-muted-foreground">Select a processing route to enter finished-product yields.</p>}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 rounded-lg border bg-muted/50 p-3 text-sm">
+                <span>Input: <strong>{formatQuantity(millingInputQuantity)} kg</strong></span>
+                <span>Outputs: <strong>{formatQuantity(millingOutputQuantity)} kg</strong></span>
+                <span>Processing loss: <strong>{formatQuantity(Math.max(0, roundQuantity(millingInputQuantity - millingOutputQuantity)))} kg</strong></span>
+              </div>
+              <div className="space-y-2"><Label>Notes / Deviations</Label><Textarea placeholder="Equipment, sieve details, observations, waste or corrective actions" value={millingNotes} onChange={(event) => setMillingNotes(event.target.value)} /></div>
+              <Button onClick={handleMillingSubmit}>{isEditing ? "Update Milling / Sieving Record" : "Submit Milling / Sieving Record"}</Button>
             </CardContent>
           </Card>
         </TabsContent>

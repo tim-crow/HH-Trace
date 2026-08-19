@@ -462,7 +462,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
 
       {/* View dialog */}
       <Dialog open={!!viewOrder} onOpenChange={() => setViewOrder(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Order {viewOrder?.orderNumber}
@@ -471,7 +471,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
             <DialogDescription>{viewOrder?.customer}</DialogDescription>
           </DialogHeader>
           {viewOrder && (
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto pr-2">
               {viewOrder.customerAddress && (
                 <div>
                   <p className="text-sm font-medium mb-1">Customer Address</p>
@@ -531,13 +531,13 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
 
       {/* Edit dialog — admin only */}
       <Dialog open={!!editOrder} onOpenChange={() => setEditOrder(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Edit Order — {editOrder?.orderNumber}</DialogTitle>
             <DialogDescription>Modify order details</DialogDescription>
           </DialogHeader>
           {editOrder && (
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto pr-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Order Number</Label>
@@ -760,12 +760,12 @@ function NewOrderDialog({ open, onClose, onSubmit, customerNames }: NewOrderDial
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle>New Order</DialogTitle>
           <DialogDescription>Create a new customer order</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto pr-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Order Number *</Label>

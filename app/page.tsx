@@ -79,6 +79,10 @@ function normalizeFinishedProductQuantities(products: FinishedProduct[]) {
     overs: normalize(product.overs),
     oil: normalize(product.oil),
     mealProteinKg: normalize(product.mealProteinKg),
+    protein50: normalize(product.protein50 || ""),
+    protein65: normalize(product.protein65 || ""),
+    fibreMeal: normalize(product.fibreMeal || ""),
+    mealFlour: normalize(product.mealFlour || ""),
   }))
 }
 
@@ -329,7 +333,7 @@ function AppContent() {
   }
 
   const handleProcessingSubmit = (
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string },
+    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -363,6 +367,13 @@ function AppContent() {
             addTotal(productType, product.mealProteinKg)
           }
         })
+      } else if (processType === "milling") {
+        finishedProducts.forEach((product) => {
+          addTotal("Hemp Protein Powder (50)", product.protein50)
+          addTotal("Hemp Protein Powder (65)", product.protein65)
+          addTotal("Hemp Fibre Meal", product.fibreMeal)
+          addTotal("Hemp Meal Flour", product.mealFlour)
+        })
       } else if (processType === "combining") {
         const productType = bulkProducts[0]?.productType
         const quantity = roundQuantity(bulkProducts.reduce((sum, product) => sum + (Number.parseFloat(product.kg) || 0), 0))
@@ -389,6 +400,8 @@ function AppContent() {
         "whole-seeds": "Whole Seeds",
         "hulled-seeds": "Hulled Seeds",
         "hemp-hearts": "Hemp Hearts",
+        "hemp-meal-cake": "Hemp Meal Cake",
+        "hemp-protein-cake": "Hemp Protein Cake",
         lights: "Hemp Lights",
         overs: "Overs",
         seconds: "Seconds",
@@ -471,6 +484,10 @@ function AppContent() {
         staffNames: formData.staffNames,
         notes: formData.notes || "",
         oilPressType: formData.oilPressType || "",
+        millingRoute: formData.millingRoute || "",
+        equipment: formData.equipment || "",
+        sieveDetails: formData.sieveDetails || "",
+        processingLossKg: roundQuantity(Math.max(0, totalKg - outputs.reduce((sum, output) => sum + output.kg, 0))),
         bulkProducts: normalizeBulkProductQuantities(bulkProducts),
         finishedProducts: normalizeFinishedProductQuantities(finishedProducts),
       }
@@ -702,8 +719,9 @@ function AppContent() {
 
     if (!data) {
       // No saved snapshot — synthesize a minimal one from the record so the form still opens
-      const processType: "dehulling" | "pressing" =
-        record.productType.toLowerCase().includes("press") ? "pressing" : "dehulling"
+      const processType: "dehulling" | "pressing" | "milling" =
+        record.productType.toLowerCase().includes("mill") ? "milling"
+          : record.productType.toLowerCase().includes("press") ? "pressing" : "dehulling"
       const match = (record.processor || "").match(/^(.*?)\s*\((\d+)\s*staff\)\s*$/i)
       const staffNames = match ? match[1] : (record.processor || "")
       const staffCount = match ? match[2] : ""
@@ -716,7 +734,7 @@ function AppContent() {
         staffNames,
         notes: "",
         bulkProducts: [{ bag: "", productType: "", kg: String(record.quantity || ""), batchCode: "", notes: "" }],
-        finishedProducts: [{ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "" }],
+        finishedProducts: [{ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "", protein50: "", protein65: "", fibreMeal: "", mealFlour: "" }],
         totalInputKg: record.quantity,
       })
       showMessage("No saved form snapshot for this older record — opened a partial form pre-filled from the record summary.")
@@ -731,12 +749,15 @@ function AppContent() {
         staffNames: fd.staffNames || "",
         notes: fd.notes || "",
         oilPressType: fd.oilPressType || "",
+        millingRoute: fd.millingRoute || "",
+        equipment: fd.equipment || "",
+        sieveDetails: fd.sieveDetails || "",
         bulkProducts: Array.isArray(fd.bulkProducts) && fd.bulkProducts.length
           ? normalizeBulkProductQuantities(fd.bulkProducts)
           : [{ bag: "", productType: "", kg: "", batchCode: "", notes: "" }],
         finishedProducts: Array.isArray(fd.finishedProducts) && fd.finishedProducts.length
           ? normalizeFinishedProductQuantities(fd.finishedProducts)
-          : [{ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "" }],
+          : [{ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "", protein50: "", protein65: "", fibreMeal: "", mealFlour: "" }],
         totalInputKg: (data as any).total_input_kg ?? record.quantity,
       })
     }
@@ -745,7 +766,7 @@ function AppContent() {
 
   const handleProcessingRunUpdate = (
     runId: string,
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string },
+    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -762,6 +783,9 @@ function AppContent() {
       staffNames: formData.staffNames,
       notes: formData.notes || "",
       oilPressType: formData.oilPressType || "",
+      millingRoute: formData.millingRoute || "",
+      equipment: formData.equipment || "",
+      sieveDetails: formData.sieveDetails || "",
       bulkProducts: normalizeBulkProductQuantities(bulkProducts),
       finishedProducts: normalizeFinishedProductQuantities(finishedProducts),
     }
@@ -770,6 +794,8 @@ function AppContent() {
       "whole-seeds": "Whole Seeds",
       "hulled-seeds": "Hulled Seeds",
       "hemp-hearts": "Hemp Hearts",
+      "hemp-meal-cake": "Hemp Meal Cake",
+      "hemp-protein-cake": "Hemp Protein Cake",
       lights: "Hemp Lights",
       overs: "Overs",
       seconds: "Seconds",
@@ -804,6 +830,13 @@ function AppContent() {
         products.forEach((product) => {
           add("Hemp Oil (Raw)", product.oil)
           add(product.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake", product.mealProteinKg)
+        })
+      } else if (runProcessType === "milling") {
+        products.forEach((product) => {
+          add("Hemp Protein Powder (50)", product.protein50)
+          add("Hemp Protein Powder (65)", product.protein65)
+          add("Hemp Fibre Meal", product.fibreMeal)
+          add("Hemp Meal Flour", product.mealFlour)
         })
       } else if (runProcessType === "combining") {
         const productType = sourceProducts[0]?.productType
@@ -904,7 +937,10 @@ function AppContent() {
       process_type: processType,
       total_input_kg: totalKg,
       outputs: Object.entries(newOutputTotals).map(([productType, kg]) => ({ productType, kg })),
-      form_data: formSnapshot,
+      form_data: {
+        ...formSnapshot,
+        processingLossKg: roundQuantity(Math.max(0, totalKg - Object.values(newOutputTotals).reduce((sum, quantity) => sum + quantity, 0))),
+      },
     }).eq('id', runId).then()
 
     // Update the linked records row to keep summary in sync
