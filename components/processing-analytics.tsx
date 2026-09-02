@@ -28,8 +28,8 @@ const PRODUCT_COLORS: Record<string, string> = {
   "Hemp Lights": "#ca8a04",
   "Overs": "#dc2626",
   "Hemp Oil (Raw)": "#059669",
-  "Hemp Meal Cake": "#7c3aed",
-  "Hemp Protein Cake": "#2563eb",
+  "Hemp Meal Chips/Pellets (Dark)": "#7c3aed",
+  "Hemp Protein Chips (Light)": "#2563eb",
 }
 
 export function ProcessingAnalytics() {

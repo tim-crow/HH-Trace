@@ -363,7 +363,7 @@ function AppContent() {
         finishedProducts.forEach((product) => {
           addTotal("Hemp Oil (Raw)", product.oil)
           if (product.mealProteinKg && Number.parseFloat(product.mealProteinKg) > 0) {
-            const productType = product.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake"
+            const productType = product.mealProtein === "protein" ? "Hemp Protein Chips (Light)" : "Hemp Meal Chips/Pellets (Dark)"
             addTotal(productType, product.mealProteinKg)
           }
         })
@@ -400,8 +400,8 @@ function AppContent() {
         "whole-seeds": "Whole Seeds",
         "hulled-seeds": "Hulled Seeds",
         "hemp-hearts": "Hemp Hearts",
-        "hemp-meal-cake": "Hemp Meal Cake",
-        "hemp-protein-cake": "Hemp Protein Cake",
+        "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)",
+        "hemp-protein-cake": "Hemp Protein Chips (Light)",
         lights: "Hemp Lights",
         overs: "Overs",
         seconds: "Seconds",
@@ -794,8 +794,8 @@ function AppContent() {
       "whole-seeds": "Whole Seeds",
       "hulled-seeds": "Hulled Seeds",
       "hemp-hearts": "Hemp Hearts",
-      "hemp-meal-cake": "Hemp Meal Cake",
-      "hemp-protein-cake": "Hemp Protein Cake",
+      "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)",
+      "hemp-protein-cake": "Hemp Protein Chips (Light)",
       lights: "Hemp Lights",
       overs: "Overs",
       seconds: "Seconds",
@@ -829,7 +829,7 @@ function AppContent() {
       } else if (runProcessType === "pressing") {
         products.forEach((product) => {
           add("Hemp Oil (Raw)", product.oil)
-          add(product.mealProtein === "protein" ? "Hemp Protein Cake" : "Hemp Meal Cake", product.mealProteinKg)
+          add(product.mealProtein === "protein" ? "Hemp Protein Chips (Light)" : "Hemp Meal Chips/Pellets (Dark)", product.mealProteinKg)
         })
       } else if (runProcessType === "milling") {
         products.forEach((product) => {

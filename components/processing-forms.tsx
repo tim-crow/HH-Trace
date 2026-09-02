@@ -158,7 +158,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
 
   const getAvailableBatches = (productType: string): AvailableBatch[] => {
     if (!productType) return []
-    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", "hemp-meal-cake": "Hemp Meal Cake", "hemp-protein-cake": "Hemp Protein Cake", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
+    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)", "hemp-protein-cake": "Hemp Protein Chips (Light)", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
     const displayName = productTypeMap[productType] || productType
     return inventory
       .filter((item) => item.productType === displayName && item.quantity > 0 && item.location === "Factory")
@@ -225,7 +225,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
     }
     const requiredInputType = millingRoute === "protein-65" ? "hemp-protein-cake" : "hemp-meal-cake"
     if (completedInputs.some((product) => product.productType !== requiredInputType)) {
-      onError(`${millingRoute === "protein-65" ? "Protein 65" : "This route"} requires ${millingRoute === "protein-65" ? "Hemp Protein Cake" : "Hemp Meal Cake"} input.`)
+      onError(`${millingRoute === "protein-65" ? "Protein 65" : "This route"} requires ${millingRoute === "protein-65" ? "Hemp Protein Chips (Light)" : "Hemp Meal Chips/Pellets (Dark)"} input.`)
       return
     }
     if (!validateFactoryStock(completedInputs)) return
@@ -622,8 +622,8 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 onChange={setMillingBulk}
                 getAvailableBatches={getAvailableBatches}
                 productOptions={millingRoute === "protein-65"
-                  ? [{ key: "hemp-protein-cake", label: "Hemp Protein Cake" }]
-                  : millingRoute ? [{ key: "hemp-meal-cake", label: "Hemp Meal Cake" }] : []}
+                  ? [{ key: "hemp-protein-cake", label: "Hemp Protein Chips (Light)" }]
+                  : millingRoute ? [{ key: "hemp-meal-cake", label: "Hemp Meal Chips/Pellets (Dark)" }] : []}
               />
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold">Finished Products (KG)</h4>
