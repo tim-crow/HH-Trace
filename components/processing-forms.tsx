@@ -523,8 +523,8 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 <Select value={pressOilType} onValueChange={setPressOilType}>
                   <SelectTrigger><SelectValue placeholder="Select press type" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="large">LARGE (FLORAPOWER)</SelectItem>
-                    <SelectItem value="small">SMALL (ZIGGY)</SelectItem>
+                    <SelectItem value="florapower-sally">Florapower (Sally)</SelectItem>
+                    <SelectItem value="k4-k8">K4/K8</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
