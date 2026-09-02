@@ -8,7 +8,7 @@ export const HEMP_PRODUCTS = [
   "Hemp Meal Cake",
   "Hemp Protein Cake",
   "Hemp Meal Flour",
-  "Hemp Fibre Meal",
+  "Hemp Fibre Meal (Sand)",
   "Hemp Protein Powder (50)",
   "Hemp Protein Powder (65)",
   "Overs",

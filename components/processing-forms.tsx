@@ -244,7 +244,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       (millingRoute === "protein-50" && (protein50Quantity <= 0 || fibreMealQuantity <= 0))
     ) {
       onError(millingRoute === "protein-50"
-        ? "Enter positive quantities for both Protein Powder 50 and Fibre Meal."
+        ? "Enter positive quantities for both Protein Powder 50 and Fibre Meal (Sand)."
         : "Enter a positive finished-product quantity.")
       return
     }
@@ -254,7 +254,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
     }
     const outputProductTypes = millingRoute === "protein-65" ? ["Hemp Protein Powder (65)"]
       : millingRoute === "meal-flour" ? ["Hemp Meal Flour"]
-        : ["Hemp Protein Powder (50)", "Hemp Fibre Meal"]
+        : ["Hemp Protein Powder (50)", "Hemp Fibre Meal (Sand)"]
     if (!isEditing && inventory.some((item) => !item.deleted && item.batchCode === millingBatch.trim() && outputProductTypes.includes(item.productType))) {
       onError(`Output batch ${millingBatch.trim()} already exists for this product. Edit the existing run or use a new output batch code.`)
       return
@@ -634,7 +634,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                   {millingRoute === "protein-50" && (
                     <>
                       <div className="space-y-2"><Label>Hemp Protein Powder 50 *</Label><Input type="number" min={0} step="0.1" value={millingFinished[0].protein50} onChange={(event) => updateFinished(setMillingFinished, 0, "protein50", event.target.value)} /></div>
-                      <div className="space-y-2"><Label>Hemp Fibre Meal *</Label><Input type="number" min={0} step="0.1" value={millingFinished[0].fibreMeal} onChange={(event) => updateFinished(setMillingFinished, 0, "fibreMeal", event.target.value)} /></div>
+                      <div className="space-y-2"><Label>Hemp Fibre Meal (Sand) *</Label><Input type="number" min={0} step="0.1" value={millingFinished[0].fibreMeal} onChange={(event) => updateFinished(setMillingFinished, 0, "fibreMeal", event.target.value)} /></div>
                     </>
                   )}
                   {millingRoute === "meal-flour" && (

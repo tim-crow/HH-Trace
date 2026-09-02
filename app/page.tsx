@@ -371,7 +371,7 @@ function AppContent() {
         finishedProducts.forEach((product) => {
           addTotal("Hemp Protein Powder (50)", product.protein50)
           addTotal("Hemp Protein Powder (65)", product.protein65)
-          addTotal("Hemp Fibre Meal", product.fibreMeal)
+          addTotal("Hemp Fibre Meal (Sand)", product.fibreMeal)
           addTotal("Hemp Meal Flour", product.mealFlour)
         })
       } else if (processType === "combining") {
@@ -835,7 +835,7 @@ function AppContent() {
         products.forEach((product) => {
           add("Hemp Protein Powder (50)", product.protein50)
           add("Hemp Protein Powder (65)", product.protein65)
-          add("Hemp Fibre Meal", product.fibreMeal)
+          add("Hemp Fibre Meal (Sand)", product.fibreMeal)
           add("Hemp Meal Flour", product.mealFlour)
         })
       } else if (runProcessType === "combining") {
