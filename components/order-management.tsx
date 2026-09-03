@@ -102,7 +102,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
 
   const openCount = activeOrders.filter((o) => o.status !== "Dispatched").length
   const sorted = [...filtered].sort((a, b) => {
-    return STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.dueDate.localeCompare(b.dueDate)
+    return a.dueDate.localeCompare(b.dueDate) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
   })
 
   const handleStatusUpdate = (order: Order, newStatus: OrderStatus) => {
@@ -256,7 +256,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       ? activeOrders.filter((o) => o.status !== "Dispatched")
       : activeOrders
     const sortedExport = [...exportOrders].sort((a, b) => {
-      return STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.dueDate.localeCompare(b.dueDate)
+      return a.dueDate.localeCompare(b.dueDate) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
     })
     if (sortedExport.length === 0) { onMessage("No orders to export"); return }
     const win = window.open("", "_blank")
