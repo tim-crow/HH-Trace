@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Search } from "lucide-react"
 import { getAuditLog } from "@/lib/audit-log"
+import { formatDateTime } from "@/lib/utils"
 
 export function AuditLogView() {
   const [filter, setFilter] = React.useState("")
@@ -55,7 +56,7 @@ export function AuditLogView() {
               {filtered.slice(0, 100).map((entry) => (
                 <TableRow key={entry.id}>
                   <TableCell className="whitespace-nowrap text-sm">
-                    {new Date(entry.timestamp).toLocaleString()}
+                    {formatDateTime(entry.timestamp)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

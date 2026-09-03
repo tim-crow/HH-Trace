@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Plus, Eye, Edit, Search, Printer, Download, Trash2 } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
-import { cn, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
+import { cn, formatDate, formatDateTime, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
 import { HEMP_PRODUCTS, FINISHED_GOODS, PRODUCT_UNIT_WEIGHTS } from "@/lib/constants"
 import type { Order, OrderStatus, FreightMethod, OrderItem } from "@/lib/types"
@@ -139,7 +139,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
     if (data.freight === "Bulk" && data.freightCarrier.trim()) saveFreightCompany(data.freightCarrier)
     onOrdersChange([...orders, newOrder])
     const freightLabel = data.freight ? `${data.freight}${data.freightCarrier ? ` (${data.freightCarrier})` : ""}` : "N/A"
-    onAuditLog("Created Order", data.orderNumber, `${data.customer} — ${data.details}, due ${data.dueDate}, freight: ${freightLabel}`)
+    onAuditLog("Created Order", data.orderNumber, `${data.customer} — ${data.details}, due ${formatDate(data.dueDate)}, freight: ${freightLabel}`)
     onMessage(`Order ${data.orderNumber} created!`)
     setShowNewForm(false)
 
@@ -222,10 +222,10 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       <div class="grid">
         <div class="field"><label>Order Number</label><p>${order.orderNumber}</p></div>
         <div class="field"><label>Customer</label><p>${order.customer}</p></div>
-        <div class="field"><label>Date Received</label><p>${order.dateReceived}</p></div>
-        <div class="field"><label>Due Date</label><p style="${isOverdue ? "color:#dc2626;font-weight:700" : ""}">${order.dueDate}</p></div>
+        <div class="field"><label>Date Received</label><p>${formatDate(order.dateReceived)}</p></div>
+        <div class="field"><label>Due Date</label><p style="${isOverdue ? "color:#dc2626;font-weight:700" : ""}">${formatDate(order.dueDate)}</p></div>
         <div class="field"><label>Freight</label><p>${order.freight || "—"}${order.freight === "Bulk" && order.freightCarrier ? ` — ${order.freightCarrier}` : ""}</p></div>
-        <div class="field"><label>Last Updated</label><p>${order.lastUpdatedBy} — ${new Date(order.lastUpdated).toLocaleDateString()}</p></div>
+        <div class="field"><label>Last Updated</label><p>${order.lastUpdatedBy} — ${formatDate(order.lastUpdated)}</p></div>
       </div>
       ${order.customerAddress ? `<div class="details-box"><label>Customer Address</label><p>${order.customerAddress}</p></div>` : ""}
       ${order.notes ? `<div class="details-box" style="border-left:3px solid #f59e0b"><label>Notes for Team</label><p>${order.notes}</p></div>` : ""}
@@ -244,7 +244,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
         </div>
         <div class="notes-lines">${Array(5).fill('<div class="line"></div>').join("")}</div>
       </div>
-      <div class="footer"><span>Printed ${new Date().toLocaleString()}</span><span>Hemp Harvests Traceability System</span></div>
+      <div class="footer"><span>Printed ${formatDateTime(new Date().toISOString())}</span><span>Hemp Harvests Traceability System</span></div>
       </body></html>`)
     win.document.close()
     win.print()
@@ -271,10 +271,10 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
         <div class="grid">
           <div class="field"><label>Order Number</label><p>${order.orderNumber}</p></div>
           <div class="field"><label>Customer</label><p>${order.customer}</p></div>
-          <div class="field"><label>Date Received</label><p>${order.dateReceived}</p></div>
-          <div class="field"><label>Due Date</label><p style="${isOverdue ? "color:#dc2626;font-weight:700" : ""}">${order.dueDate}</p></div>
+          <div class="field"><label>Date Received</label><p>${formatDate(order.dateReceived)}</p></div>
+          <div class="field"><label>Due Date</label><p style="${isOverdue ? "color:#dc2626;font-weight:700" : ""}">${formatDate(order.dueDate)}</p></div>
           <div class="field"><label>Freight</label><p>${order.freight || "—"}${order.freight === "Bulk" && order.freightCarrier ? ` — ${order.freightCarrier}` : ""}</p></div>
-          <div class="field"><label>Last Updated</label><p>${order.lastUpdatedBy} — ${new Date(order.lastUpdated).toLocaleDateString()}</p></div>
+          <div class="field"><label>Last Updated</label><p>${order.lastUpdatedBy} — ${formatDate(order.lastUpdated)}</p></div>
         </div>
         ${order.customerAddress ? `<div class="details-box"><label>Customer Address</label><p>${order.customerAddress}</p></div>` : ""}
         ${order.notes ? `<div class="details-box" style="border-left:3px solid #f59e0b"><label>Notes for Team</label><p>${order.notes}</p></div>` : ""}
@@ -293,7 +293,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
           </div>
           <div class="notes-lines">${Array(5).fill('<div class="line"></div>').join("")}</div>
         </div>
-        <div class="footer"><span>Printed ${new Date().toLocaleString()}</span><span>Hemp Harvests Traceability System</span></div>
+        <div class="footer"><span>Printed ${formatDateTime(new Date().toISOString())}</span><span>Hemp Harvests Traceability System</span></div>
       </div>`
     }).join("")
     win.document.write(`<!DOCTYPE html><html><head><title>${mode === "open" ? "Open" : "All"} Orders — Hemp Harvests</title>
@@ -409,9 +409,9 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
                     <TableCell className="font-mono text-sm font-medium">{order.orderNumber}</TableCell>
                     <TableCell className="font-medium">{order.customer}</TableCell>
                     <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">{order.details}</TableCell>
-                    <TableCell className="whitespace-nowrap text-sm">{order.dateReceived}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{formatDate(order.dateReceived)}</TableCell>
                     <TableCell className={cn("whitespace-nowrap text-sm", isOverdue && "text-destructive font-medium")}>
-                      {order.dueDate}
+                      {formatDate(order.dueDate)}
                       {isOverdue && <span className="ml-1 text-[10px]">OVERDUE</span>}
                     </TableCell>
                     <TableCell>
@@ -499,11 +499,11 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium mb-1">Date Received</p>
-                  <p className="text-sm text-muted-foreground">{viewOrder.dateReceived}</p>
+                  <p className="text-sm text-muted-foreground">{formatDate(viewOrder.dateReceived)}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium mb-1">Due Date</p>
-                  <p className="text-sm text-muted-foreground">{viewOrder.dueDate}</p>
+                  <p className="text-sm text-muted-foreground">{formatDate(viewOrder.dueDate)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -520,7 +520,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
               </div>
               <div>
                 <p className="text-sm font-medium mb-1">Last Updated By</p>
-                <p className="text-sm text-muted-foreground">{viewOrder.lastUpdatedBy} — {new Date(viewOrder.lastUpdated).toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">{viewOrder.lastUpdatedBy} — {formatDateTime(viewOrder.lastUpdated)}</p>
               </div>
             </div>
           )}

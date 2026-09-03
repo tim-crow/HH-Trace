@@ -4,7 +4,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Bot, X, Send, Sparkles, Loader2 } from "lucide-react"
-import { cn, formatQuantity } from "@/lib/utils"
+import { cn, formatDate, formatDateTime, formatQuantity } from "@/lib/utils"
 import type { InventoryItem, TransactionRecord } from "@/lib/types"
 
 interface Message {
@@ -133,7 +133,7 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
           const code = batchMatch[1]
           const item = inventory.find((i) => i.batchCode.toLowerCase() === code.toLowerCase())
           if (item) {
-            return `🔍 **Batch ${item.batchCode}**\n\n• Product: ${item.productType}\n• Quantity: **${formatQuantity(item.quantity)} kg**\n• Location: ${item.location}\n• Last Updated: ${new Date(item.lastUpdated).toLocaleString()}`
+            return `🔍 **Batch ${item.batchCode}**\n\n• Product: ${item.productType}\n• Quantity: **${formatQuantity(item.quantity)} kg**\n• Location: ${item.location}\n• Last Updated: ${formatDateTime(item.lastUpdated)}`
           }
           return `No batch matching "${code}" found in inventory.`
         }
@@ -163,7 +163,7 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         const list = Object.entries(byType)
           .map(([type, count]) => `• **${type}**: ${count}`)
           .join("\n")
-        return `📜 **Transaction Records** (${records.length} total)\n\n${list}\n\nMost recent: **${records[records.length - 1]?.type}** — ${records[records.length - 1]?.batchCode} on ${records[records.length - 1]?.date}`
+        return `📜 **Transaction Records** (${records.length} total)\n\n${list}\n\nMost recent: **${records[records.length - 1]?.type}** — ${records[records.length - 1]?.batchCode} on ${formatDate(records[records.length - 1]?.date)}`
       }
 
       // Help

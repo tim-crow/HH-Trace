@@ -11,7 +11,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts"
 import { supabase } from "@/lib/supabase"
-import { cn, formatQuantity } from "@/lib/utils"
+import { cn, formatDate, formatQuantity } from "@/lib/utils"
 
 interface ProcessingRun {
   id: string
@@ -236,7 +236,7 @@ export function ProcessingAnalytics() {
                     const wastePct = run.totalInputKg > 0 ? ((run.totalInputKg - totalOut) / run.totalInputKg) * 100 : 0
                     return (
                       <TableRow key={run.id}>
-                        <TableCell className="whitespace-nowrap text-sm">{run.date}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">{formatDate(run.date)}</TableCell>
                         <TableCell className="font-mono text-sm font-medium">{run.batchId}</TableCell>
                         <TableCell className="text-right text-sm font-medium">{formatQuantity(run.totalInputKg)}</TableCell>
                         {allProductTypes.map((type) => {

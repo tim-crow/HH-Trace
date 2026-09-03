@@ -19,7 +19,7 @@ import {
 import { Edit, Search, Lock, Trash2, RotateCcw } from "lucide-react"
 import { HEMP_PRODUCTS, FINISHED_GOODS } from "@/lib/constants"
 import type { TransactionRecord } from "@/lib/types"
-import { formatQuantity, roundQuantity } from "@/lib/utils"
+import { formatDate, formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface RecordsTableProps {
   records: TransactionRecord[]
@@ -134,7 +134,7 @@ export function RecordsTable({ records, isAdmin, canManage, onRecordUpdate, onOp
             <TableBody>
               {sorted.map((record) => (
                 <TableRow key={record.id} className={record.deleted ? "opacity-60 bg-destructive/5" : undefined}>
-                  <TableCell className="text-muted-foreground">{record.date}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(record.date)}</TableCell>
                   <TableCell>
                     <Badge variant={typeVariantMap[record.type] || "secondary"}>
                       {record.type}

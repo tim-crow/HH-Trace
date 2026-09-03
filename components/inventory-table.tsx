@@ -12,7 +12,7 @@ import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { LOCATIONS } from "@/lib/constants"
 import { getOtherLocations, saveOtherLocation } from "@/lib/remembered-entries"
 import type { InventoryItem } from "@/lib/types"
-import { formatQuantity, roundQuantity } from "@/lib/utils"
+import { formatDate, formatDateTime, formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface InventoryTableProps {
   inventory: InventoryItem[]
@@ -211,7 +211,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, canEdit, 
                           item.location
                         )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(item.lastUpdated)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           {editingRow === item.id ? (
@@ -285,7 +285,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, canEdit, 
                     <TableCell>{formatQuantity(item.quantity)} kg</TableCell>
                     <TableCell>{item.deletedBy || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {item.deletedAt ? new Date(item.deletedAt).toLocaleString() : "—"}
+                      {item.deletedAt ? formatDateTime(item.deletedAt) : "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button size="sm" variant="outline" onClick={() => onRestore?.(item)}>

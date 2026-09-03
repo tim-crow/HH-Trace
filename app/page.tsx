@@ -41,7 +41,7 @@ import { OrderManagement } from "@/components/order-management"
 import { AuditLogView } from "@/components/audit-log-view"
 import { ProcessingAnalytics } from "@/components/processing-analytics"
 import { AssistantChat } from "@/components/assistant-chat"
-import { formatQuantity, generateId, roundQuantity } from "@/lib/utils"
+import { formatDate, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
 import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, OrderStatus, ProcessingRun, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
@@ -139,7 +139,7 @@ function openPackingSlip(data: PackingSlipData) {
       <div class="document-title">
         <h1>Packing Slip</h1>
         <p>${escapePackingSlipValue(data.number)}</p>
-        <p>${escapePackingSlipValue(data.date)}</p>
+        <p>${escapePackingSlipValue(formatDate(data.date))}</p>
       </div>
     </div>
     <div class="details">

@@ -16,7 +16,7 @@ import {
   Plus,
   Leaf,
 } from "lucide-react"
-import { cn, formatQuantity } from "@/lib/utils"
+import { cn, formatDate, formatDateTime, formatQuantity } from "@/lib/utils"
 import { getAuditLog } from "@/lib/audit-log"
 import type { InventoryItem, Order, OrderStatus } from "@/lib/types"
 
@@ -226,7 +226,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
                         <TableCell className="font-mono text-sm font-medium">{order.orderNumber}</TableCell>
                         <TableCell>{order.customer}</TableCell>
                         <TableCell className={cn("whitespace-nowrap text-sm", isOverdue && "text-destructive font-medium")}>
-                          {order.dueDate}
+                          {formatDate(order.dueDate)}
                           {isOverdue && <span className="ml-1 text-[10px]">OVERDUE</span>}
                         </TableCell>
                         <TableCell>
@@ -308,7 +308,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-sm font-medium">{entry.userName}</span>
                           <span className="text-[10px] text-muted-foreground">
-                            {new Date(entry.timestamp).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            {formatDateTime(entry.timestamp)}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground truncate">
