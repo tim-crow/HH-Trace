@@ -166,7 +166,7 @@ export default function HempTraceabilityDashboard() {
 }
 
 function AppContent() {
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, canManage } = useAuth()
 
   const [activeSection, setActiveSection] = React.useState("dashboard")
   const [inventory, setInventory] = React.useState<InventoryItem[]>([])
@@ -643,8 +643,8 @@ function AppContent() {
 
   const handleInventorySave = (id: string, data: Partial<InventoryItem>) => {
     const item = inventory.find((i) => i.id === id)
-    if (!isAdmin) {
-      showMessage("Only admins can edit inventory records. Please ask an admin to make this change.")
+    if (!canManage) {
+      showMessage("Only Operations or Admin users can edit inventory records.")
       return
     }
     const roundedData: Partial<InventoryItem> = data.quantity === undefined
@@ -1151,6 +1151,7 @@ function AppContent() {
             orders={orders}
             onOrdersChange={handleOrdersChange}
             isAdmin={isAdmin}
+            canManage={canManage}
             userName={user.name}
             onAuditLog={(action, target, details) => logAction(user.name, user.role, action, target, details)}
             onMessage={showMessage}
@@ -1178,6 +1179,7 @@ function AppContent() {
             onSave={handleInventorySave}
             onDelete={handleDeleteRequest}
             isAdmin={isAdmin}
+            canEdit={canManage}
             deletedItems={isAdmin ? inventory.filter((i) => i.deleted) : []}
             onRestore={handleRestore}
           />
@@ -1186,6 +1188,7 @@ function AppContent() {
         return <RecordsTable
           records={records}
           isAdmin={isAdmin}
+          canManage={canManage}
           onOpenProcessingForm={handleOpenProcessingForEdit}
           onRecordDelete={handleRecordDelete}
           onRecordRestore={handleRecordRestore}

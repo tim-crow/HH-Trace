@@ -24,6 +24,7 @@ import { formatQuantity, roundQuantity } from "@/lib/utils"
 interface RecordsTableProps {
   records: TransactionRecord[]
   isAdmin?: boolean
+  canManage?: boolean
   onRecordUpdate?: (record: TransactionRecord) => void
   /** Called when the user clicks edit on a Processing record — opens the full Processing form */
   onOpenProcessingForm?: (record: TransactionRecord) => void
@@ -40,7 +41,7 @@ const typeVariantMap: Record<string, "default" | "success" | "destructive" | "wa
   Outgoing: "warning",
 }
 
-export function RecordsTable({ records, isAdmin, onRecordUpdate, onOpenProcessingForm, onRecordDelete, onRecordRestore }: RecordsTableProps) {
+export function RecordsTable({ records, isAdmin, canManage, onRecordUpdate, onOpenProcessingForm, onRecordDelete, onRecordRestore }: RecordsTableProps) {
   const [editRecord, setEditRecord] = React.useState<TransactionRecord | null>(null)
   const [filter, setFilter] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<string>("all")
@@ -70,7 +71,7 @@ export function RecordsTable({ records, isAdmin, onRecordUpdate, onOpenProcessin
     if (record.type === "Processing") {
       return !record.productType.startsWith("Raw Material")
     }
-    return !!isAdmin
+    return !!canManage
   }
 
   const handleSave = () => {

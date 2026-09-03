@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-export type UserRole = "admin" | "operator"
+export type UserRole = "admin" | "operations" | "operator"
 
 export interface User {
   name: string
@@ -14,6 +14,7 @@ interface AuthContextValue {
   login: (name: string, role: UserRole) => void
   logout: () => void
   isAdmin: boolean
+  canManage: boolean
 }
 
 const AuthContext = React.createContext<AuthContextValue>({
@@ -21,6 +22,7 @@ const AuthContext = React.createContext<AuthContextValue>({
   login: () => {},
   logout: () => {},
   isAdmin: false,
+  canManage: false,
 })
 
 const STORAGE_KEY = "hh-auth"
@@ -49,9 +51,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const isAdmin = user?.role === "admin"
+  const canManage = isAdmin || user?.role === "operations"
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, login, logout, isAdmin, canManage }}>
       {children}
     </AuthContext.Provider>
   )

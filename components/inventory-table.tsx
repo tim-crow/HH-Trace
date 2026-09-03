@@ -19,11 +19,12 @@ interface InventoryTableProps {
   onSave: (id: string, data: Partial<InventoryItem>) => void
   onDelete: (item: InventoryItem) => void
   isAdmin: boolean
+  canEdit: boolean
   deletedItems?: InventoryItem[]
   onRestore?: (item: InventoryItem) => void
 }
 
-export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedItems = [], onRestore }: InventoryTableProps) {
+export function InventoryTable({ inventory, onSave, onDelete, isAdmin, canEdit, deletedItems = [], onRestore }: InventoryTableProps) {
   const [filter, setFilter] = React.useState("")
   const [editingRow, setEditingRow] = React.useState<string | null>(null)
   const [editData, setEditData] = React.useState<Partial<InventoryItem>>({})
@@ -78,7 +79,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
   const firstRawMaterialGroup = inventoryGroups.findIndex(({ productType }) => productType.startsWith("Raw Material —"))
 
   const handleEdit = (item: InventoryItem) => {
-    if (!isAdmin) return
+    if (!canEdit) return
     setEditingRow(item.id)
     setEditData({ ...item, quantity: roundQuantity(item.quantity) })
     if (item.location === "Factory") {
@@ -135,7 +136,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
         <CardHeader>
           <CardTitle>Current Inventory</CardTitle>
           <CardDescription>
-            {isAdmin ? "Click edit to modify inventory details" : "View inventory — contact admin to make changes"}
+            {canEdit ? "Click edit to modify inventory details" : "View inventory — contact operations to make changes"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -223,14 +224,16 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, deletedIt
                               </Button>
                             </>
                           ) : (
-                            isAdmin && (
+                            canEdit && (
                               <>
                                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(item)}>
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => onDelete(item)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {isAdmin && (
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => onDelete(item)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </>
                             )
                           )}

@@ -4,7 +4,7 @@ export interface AuditEntry {
   id: string
   timestamp: string
   userName: string
-  userRole: "admin" | "operator"
+  userRole: "admin" | "operations" | "operator"
   action: string
   target: string
   details: string
@@ -21,7 +21,7 @@ export function getAuditLog(): AuditEntry[] {
 
 export function logAction(
   userName: string,
-  userRole: "admin" | "operator",
+  userRole: "admin" | "operations" | "operator",
   action: string,
   target: string,
   details: string

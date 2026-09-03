@@ -70,13 +70,14 @@ interface OrderManagementProps {
   orders: Order[]
   onOrdersChange: (orders: Order[]) => void
   isAdmin: boolean
+  canManage: boolean
   userName: string
   onAuditLog: (action: string, target: string, details: string) => void
   onMessage: (msg: string) => void
   onReadyToShipForOutgoing: (order: Order) => void
 }
 
-export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onAuditLog, onMessage, onReadyToShipForOutgoing }: OrderManagementProps) {
+export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, userName, onAuditLog, onMessage, onReadyToShipForOutgoing }: OrderManagementProps) {
   const [filter, setFilter] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<string>("open")
   const [viewOrder, setViewOrder] = React.useState<Order | null>(null)
@@ -336,7 +337,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
 
   // Determine which statuses an operator can move to
   const getNextStatuses = (current: OrderStatus): OrderStatus[] => {
-    if (isAdmin) return ORDER_STATUSES
+    if (canManage) return ORDER_STATUSES
     switch (current) {
       case "New": return ["In Progress"]
       case "In Progress": return ["Ready to Ship"]
@@ -359,7 +360,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
           <Button variant="outline" size="sm" onClick={() => handleExportPdf("all")}>
             <Download className="h-4 w-4 mr-1" />All Orders
           </Button>
-          {isAdmin && (
+          {canManage && (
             <Button onClick={() => setShowNewForm(true)}>
               <Plus className="h-4 w-4 mr-1" />New Order
             </Button>
@@ -438,7 +439,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handlePrint(order)} title="Print order sheet">
                           <Printer className="h-4 w-4" />
                         </Button>
-                        {isAdmin && (
+                        {canManage && (
                           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditOrder(order)}>
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -653,11 +654,13 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, userName, onA
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-end">
-                  <Button variant="destructive" size="sm" onClick={() => setOrderToDelete(editOrder)}>
-                    Delete Order
-                  </Button>
-                </div>
+                {isAdmin && (
+                  <div className="flex items-end">
+                    <Button variant="destructive" size="sm" onClick={() => setOrderToDelete(editOrder)}>
+                      Delete Order
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}

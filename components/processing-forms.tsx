@@ -524,7 +524,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                   <SelectTrigger><SelectValue placeholder="Select press type" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="florapower-sally">Florapower (Sally)</SelectItem>
-                    <SelectItem value="k4-k8">K4/K8</SelectItem>
+                    <SelectItem value="k4-k8">K4/K8 (Kate)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

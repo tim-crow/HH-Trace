@@ -9,10 +9,13 @@ import { Leaf, Shield, User } from "lucide-react"
 import { useAuth, getAdminPin } from "@/lib/auth"
 import type { UserRole } from "@/lib/auth"
 
+const OPERATIONS_PASSWORD = "Hemp222"
+
 export function LoginScreen() {
   const { login } = useAuth()
   const [name, setName] = React.useState("")
   const [pin, setPin] = React.useState("")
+  const [operationsPassword, setOperationsPassword] = React.useState("")
   const [selectedRole, setSelectedRole] = React.useState<UserRole | null>(null)
   const [error, setError] = React.useState("")
 
@@ -27,7 +30,11 @@ export function LoginScreen() {
         return
       }
     }
-    login(name.trim(), selectedRole!)
+    if (selectedRole === "operations" && operationsPassword !== OPERATIONS_PASSWORD) {
+      setError("Incorrect Operations password")
+      return
+    }
+    login(selectedRole === "operations" ? "Marion" : name.trim(), selectedRole!)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -36,7 +43,7 @@ export function LoginScreen() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-2xl space-y-6">
         <div className="text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm mx-auto mb-4">
             <Leaf className="h-7 w-7" />
@@ -46,7 +53,7 @@ export function LoginScreen() {
         </div>
 
         {!selectedRole ? (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Card
               className="cursor-pointer transition-all hover:shadow-md hover:border-primary/30"
               onClick={() => setSelectedRole("admin")}
@@ -57,6 +64,18 @@ export function LoginScreen() {
                 </div>
                 <p className="font-semibold">Admin</p>
                 <p className="text-xs text-muted-foreground mt-1">Full access</p>
+              </CardContent>
+            </Card>
+            <Card
+              className="cursor-pointer transition-all hover:shadow-md hover:border-primary/30"
+              onClick={() => { setSelectedRole("operations"); setName("Marion") }}
+            >
+              <CardContent className="p-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mx-auto mb-3">
+                  <User className="h-6 w-6" />
+                </div>
+                <p className="font-semibold">Operations</p>
+                <p className="text-xs text-muted-foreground mt-1">Marion</p>
               </CardContent>
             </Card>
             <Card
@@ -77,25 +96,34 @@ export function LoginScreen() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 {selectedRole === "admin" ? <Shield className="h-5 w-5" /> : <User className="h-5 w-5" />}
-                Sign in as {selectedRole === "admin" ? "Admin" : "Operator"}
+                Sign in as {selectedRole === "admin" ? "Admin" : selectedRole === "operations" ? "Operations (Marion)" : "Operator"}
               </CardTitle>
               <CardDescription>
                 {selectedRole === "admin"
                   ? "Full access — edit, delete, and manage all records"
+                  : selectedRole === "operations"
+                    ? "Full operational access without administrative deletion or audit controls"
                   : "Log receivals, processing, and update statuses"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Your Name</Label>
-                <Input
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => { setName(e.target.value); setError("") }}
-                  onKeyDown={handleKeyDown}
-                  autoFocus
-                />
-              </div>
+              {selectedRole === "operations" ? (
+                <div className="space-y-2">
+                  <Label>User</Label>
+                  <Input value="Marion" disabled />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Your Name</Label>
+                  <Input
+                    placeholder="Enter your name"
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); setError("") }}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                  />
+                </div>
+              )}
               {selectedRole === "admin" && (
                 <div className="space-y-2">
                   <Label>Admin PIN</Label>
@@ -109,9 +137,22 @@ export function LoginScreen() {
                   />
                 </div>
               )}
+              {selectedRole === "operations" && (
+                <div className="space-y-2">
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    placeholder="Enter password"
+                    value={operationsPassword}
+                    onChange={(e) => { setOperationsPassword(e.target.value); setError("") }}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                  />
+                </div>
+              )}
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { setSelectedRole(null); setError(""); setPin("") }} className="flex-1">
+                <Button variant="outline" onClick={() => { setSelectedRole(null); setName(""); setError(""); setPin(""); setOperationsPassword("") }} className="flex-1">
                   Back
                 </Button>
                 <Button onClick={handleLogin} className="flex-1">
