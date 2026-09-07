@@ -1233,7 +1233,7 @@ function AppContent() {
       case "analytics":
         return <ProcessingAnalytics />
       case "audit":
-        return isAdmin ? <AuditLogView /> : null
+        return canManage ? <AuditLogView /> : null
       default:
         return <Dashboard inventory={activeInventory} orders={orders} onNavigate={setActiveSection} />
     }
@@ -1241,7 +1241,7 @@ function AppContent() {
 
   return (
     <div className="flex h-screen bg-muted/30">
-      <Sidebar activeSection={activeSection} onNavigate={setActiveSection} isOpen={sidebarOpen} isAdmin={isAdmin} />
+      <Sidebar activeSection={activeSection} onNavigate={setActiveSection} isOpen={sidebarOpen} canViewAudit={canManage} />
 
       <main className="flex-1 overflow-auto">
         <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b px-6 py-3 flex items-center gap-4">

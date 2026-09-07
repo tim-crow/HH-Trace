@@ -36,8 +36,8 @@ const navigationItems: NavigationSection[] = [
   },
 ]
 
-const adminItems: NavigationSection = {
-  title: "Admin",
+const auditItems: NavigationSection = {
+  title: "Activity",
   items: [
     { title: "Audit Log", icon: ScrollText, href: "audit" },
   ],
@@ -47,11 +47,11 @@ interface SidebarProps {
   activeSection: string
   onNavigate: (section: string) => void
   isOpen: boolean
-  isAdmin: boolean
+  canViewAudit: boolean
 }
 
-export function Sidebar({ activeSection, onNavigate, isOpen, isAdmin }: SidebarProps) {
-  const sections = isAdmin ? [...navigationItems, adminItems] : navigationItems
+export function Sidebar({ activeSection, onNavigate, isOpen, canViewAudit }: SidebarProps) {
+  const sections = canViewAudit ? [...navigationItems, auditItems] : navigationItems
 
   return (
     <aside
