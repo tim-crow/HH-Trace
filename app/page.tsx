@@ -195,17 +195,23 @@ function AppContent() {
         deletedBy: r.deleted_by || undefined,
       })))
     })
-    supabase.from('orders').select('*').then(({ data }) => {
-      if (data) setOrders(data.map((r: any) => ({
-        id: r.id, orderNumber: r.order_number, customer: r.customer,
-        customerAddress: r.customer_address || "", details: r.details,
-        items: r.items || [],
-        dateReceived: r.date_received, dueDate: r.due_date,
-        freight: r.freight, freightCarrier: r.freight_carrier,
-        notes: r.notes || "",
-        status: normalizeOrderStatus(r.status), createdBy: r.created_by, lastUpdatedBy: r.last_updated_by,
-        lastUpdated: r.last_updated, deleted: r.deleted,
-      })))
+    Promise.all([
+      supabase.from('orders').select('*'),
+      supabase.from('saved_entries').select('value').eq('type', 'order_priority'),
+    ]).then(([{ data: orderRows }, { data: priorityRows }]) => {
+      if (orderRows) {
+        const priorityIds = new Set((priorityRows || []).map((r: any) => r.value))
+        setOrders(orderRows.map((r: any) => ({
+          id: r.id, orderNumber: r.order_number, customer: r.customer,
+          customerAddress: r.customer_address || "", details: r.details,
+          items: r.items || [],
+          dateReceived: r.date_received, dueDate: r.due_date,
+          freight: r.freight, freightCarrier: r.freight_carrier,
+          notes: r.notes || "", priority: priorityIds.has(r.id),
+          status: normalizeOrderStatus(r.status), createdBy: r.created_by, lastUpdatedBy: r.last_updated_by,
+          lastUpdated: r.last_updated, deleted: r.deleted,
+        })))
+      }
     })
     supabase.from('orders').update({ status: "Ready to Ship" }).eq('status', 'Packed').then()
     supabase.from('orders').update({ status: "Dispatched" }).eq('status', 'Completed').then()
@@ -1001,6 +1007,7 @@ function AppContent() {
   }
 
   const handleOrdersChange = (newOrders: Order[]) => {
+    const previousPriorities = new Map(orders.map((order) => [order.id, !!order.priority]))
     setOrders(newOrders)
     newOrders.forEach((order) => {
       supabase.from('orders').upsert({
@@ -1021,6 +1028,20 @@ function AppContent() {
         last_updated: order.lastUpdated,
         deleted: order.deleted || false,
       }).then()
+
+      if (!!order.priority !== (previousPriorities.get(order.id) || false)) {
+        if (order.priority) {
+          supabase.from('saved_entries').upsert(
+            { type: 'order_priority', value: order.id },
+            { onConflict: 'type,value' }
+          ).then()
+        } else {
+          supabase.from('saved_entries').delete()
+            .eq('type', 'order_priority')
+            .eq('value', order.id)
+            .then()
+        }
+      }
     })
   }
 

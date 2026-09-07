@@ -141,6 +141,7 @@ export interface Order {
   createdBy: string
   lastUpdatedBy: string
   notes?: string
+  priority?: boolean
   lastUpdated: string
   deleted?: boolean
 }

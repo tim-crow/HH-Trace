@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -28,7 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Eye, Edit, Search, Printer, Download, Trash2 } from "lucide-react"
+import { Plus, Eye, Edit, Search, Printer, Download, Trash2, Star } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { cn, formatDate, formatDateTime, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
@@ -80,6 +81,7 @@ interface OrderManagementProps {
 export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, userName, onAuditLog, onMessage, onReadyToShipForOutgoing }: OrderManagementProps) {
   const [filter, setFilter] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<string>("open")
+  const [priorityOnly, setPriorityOnly] = React.useState(false)
   const [viewOrder, setViewOrder] = React.useState<Order | null>(null)
   const [editOrder, setEditOrder] = React.useState<Order | null>(null)
   const [showNewForm, setShowNewForm] = React.useState(false)
@@ -97,12 +99,12 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       order.customer.toLowerCase().includes(filter.toLowerCase()) ||
       order.details.toLowerCase().includes(filter.toLowerCase())
     const matchesStatus = statusFilter === "all" || (statusFilter === "open" ? order.status !== "Dispatched" : order.status === statusFilter)
-    return matchesSearch && matchesStatus
+    return matchesSearch && matchesStatus && (!priorityOnly || order.priority)
   })
 
   const openCount = activeOrders.filter((o) => o.status !== "Dispatched").length
   const sorted = [...filtered].sort((a, b) => {
-    return a.dueDate.localeCompare(b.dueDate) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
+    return a.dueDate.localeCompare(b.dueDate) || Number(!!b.priority) - Number(!!a.priority) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
   })
 
   const handleStatusUpdate = (order: Order, newStatus: OrderStatus) => {
@@ -117,7 +119,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
     }
   }
 
-  const handleCreateOrder = (data: { orderNumber: string; customer: string; customerAddress: string; details: string; dateReceived: string; dueDate: string; freight: FreightMethod | ""; freightCarrier: string; notes: string; items: { productType: string; quantity: number; units?: number }[] }) => {
+  const handleCreateOrder = (data: { orderNumber: string; customer: string; customerAddress: string; details: string; dateReceived: string; dueDate: string; freight: FreightMethod | ""; freightCarrier: string; notes: string; priority: boolean; items: { productType: string; quantity: number; units?: number }[] }) => {
     const newOrder: Order = {
       id: generateId("ORD"),
       orderNumber: data.orderNumber,
@@ -130,6 +132,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       freight: data.freight as FreightMethod || undefined,
       freightCarrier: data.freightCarrier || undefined,
       notes: data.notes || undefined,
+      priority: data.priority,
       status: "New",
       createdBy: userName,
       lastUpdatedBy: userName,
@@ -140,6 +143,9 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
     onOrdersChange([...orders, newOrder])
     const freightLabel = data.freight ? `${data.freight}${data.freightCarrier ? ` (${data.freightCarrier})` : ""}` : "N/A"
     onAuditLog("Created Order", data.orderNumber, `${data.customer} — ${data.details}, due ${formatDate(data.dueDate)}, freight: ${freightLabel}`)
+    if (data.priority) {
+      onAuditLog("Set Order Priority", data.orderNumber, `${data.customer} order marked as priority`)
+    }
     onMessage(`Order ${data.orderNumber} created!`)
     setShowNewForm(false)
 
@@ -158,6 +164,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
 
   const handleEditSave = () => {
     if (!editOrder) return
+    const previousOrder = orders.find((order) => order.id === editOrder.id)
     const roundedOrder = {
       ...editOrder,
       items: editOrder.items?.map((item) => ({ ...item, quantity: roundQuantity(item.quantity) })),
@@ -168,6 +175,13 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
         : o
     ))
     onAuditLog("Edited Order", editOrder.orderNumber, `Updated details for ${editOrder.customer}`)
+    if (!!previousOrder?.priority !== !!editOrder.priority) {
+      onAuditLog(
+        editOrder.priority ? "Set Order Priority" : "Removed Order Priority",
+        editOrder.orderNumber,
+        `${editOrder.customer} order ${editOrder.priority ? "marked as priority" : "returned to normal priority"}`
+      )
+    }
     onMessage(`Order ${editOrder.orderNumber} updated!`)
     setEditOrder(null)
   }
@@ -217,7 +231,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       </style></head><body>
       <div class="header">
         <div class="logo">Hemp Harvests<span>Order Sheet</span></div>
-        <div class="status${isOverdue ? " overdue" : ""}">${order.status}${isOverdue ? " — OVERDUE" : ""}</div>
+        <div class="status${isOverdue ? " overdue" : ""}">${order.priority ? "★ PRIORITY — " : ""}${order.status}${isOverdue ? " — OVERDUE" : ""}</div>
       </div>
       <div class="grid">
         <div class="field"><label>Order Number</label><p>${order.orderNumber}</p></div>
@@ -256,7 +270,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       ? activeOrders.filter((o) => o.status !== "Dispatched")
       : activeOrders
     const sortedExport = [...exportOrders].sort((a, b) => {
-      return a.dueDate.localeCompare(b.dueDate) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
+      return a.dueDate.localeCompare(b.dueDate) || Number(!!b.priority) - Number(!!a.priority) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
     })
     if (sortedExport.length === 0) { onMessage("No orders to export"); return }
     const win = window.open("", "_blank")
@@ -266,7 +280,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       return `<div class="page">
         <div class="header">
           <div class="logo">Hemp Harvests<span>Order Sheet</span></div>
-          <div class="status${isOverdue ? " overdue" : ""}">${order.status}${isOverdue ? " — OVERDUE" : ""}</div>
+          <div class="status${isOverdue ? " overdue" : ""}">${order.priority ? "★ PRIORITY — " : ""}${order.status}${isOverdue ? " — OVERDUE" : ""}</div>
         </div>
         <div class="grid">
           <div class="field"><label>Order Number</label><p>${order.orderNumber}</p></div>
@@ -383,6 +397,11 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
             ))}
           </SelectContent>
         </Select>
+        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
+          <Checkbox checked={priorityOnly} onCheckedChange={(checked) => setPriorityOnly(checked === true)} />
+          <Star className="h-4 w-4 text-amber-500" />
+          Priority only
+        </label>
       </div>
 
       <Card>
@@ -406,7 +425,16 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
 
                 return (
                   <TableRow key={order.id} className={cn(isOverdue && "bg-destructive/5")}>
-                    <TableCell className="font-mono text-sm font-medium">{order.orderNumber}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-medium">{order.orderNumber}</span>
+                        {order.priority && (
+                          <Badge className="gap-1 bg-amber-500 text-white hover:bg-amber-500">
+                            <Star className="h-3 w-3 fill-current" />Priority
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="font-medium">{order.customer}</TableCell>
                     <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">{order.details}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm">{formatDate(order.dateReceived)}</TableCell>
@@ -467,6 +495,11 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Order {viewOrder?.orderNumber}
+              {viewOrder?.priority && (
+                <Badge className="gap-1 bg-amber-500 text-white hover:bg-amber-500">
+                  <Star className="h-3 w-3 fill-current" />Priority
+                </Badge>
+              )}
               {viewOrder && <Badge variant={statusVariant(viewOrder.status)}>{viewOrder.status}</Badge>}
             </DialogTitle>
             <DialogDescription>{viewOrder?.customer}</DialogDescription>
@@ -619,6 +652,11 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
                   <Input type="date" value={editOrder.dueDate} onChange={(e) => setEditOrder({ ...editOrder, dueDate: e.target.value })} />
                 </div>
               </div>
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <Checkbox checked={!!editOrder.priority} onCheckedChange={(checked) => setEditOrder({ ...editOrder, priority: checked === true })} />
+                <Star className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-medium">Priority order</span>
+              </label>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Freight Method</Label>
@@ -716,7 +754,7 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
 interface NewOrderDialogProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: { orderNumber: string; customer: string; customerAddress: string; details: string; dateReceived: string; dueDate: string; freight: FreightMethod | ""; freightCarrier: string; notes: string; items: { productType: string; quantity: number; units?: number }[] }) => void
+  onSubmit: (data: { orderNumber: string; customer: string; customerAddress: string; details: string; dateReceived: string; dueDate: string; freight: FreightMethod | ""; freightCarrier: string; notes: string; priority: boolean; items: { productType: string; quantity: number; units?: number }[] }) => void
   customerNames: string[]
 }
 
@@ -730,6 +768,7 @@ function NewOrderDialog({ open, onClose, onSubmit, customerNames }: NewOrderDial
     freight: "" as FreightMethod | "",
     freightCarrier: "",
     notes: "",
+    priority: false,
   })
   const [items, setItems] = React.useState<{ productType: string; value: string }[]>([{ productType: "", value: "" }])
   const [error, setError] = React.useState("")
@@ -756,7 +795,7 @@ function NewOrderDialog({ open, onClose, onSubmit, customerNames }: NewOrderDial
     })
     const details = resolvedItems.map(i => formatItemSummary(i)).join(", ")
     onSubmit({ ...form, details, items: resolvedItems })
-    setForm({ orderNumber: "", customer: "", customerAddress: "", dateReceived: new Date().toISOString().split("T")[0], dueDate: "", freight: "", freightCarrier: "", notes: "" })
+    setForm({ orderNumber: "", customer: "", customerAddress: "", dateReceived: new Date().toISOString().split("T")[0], dueDate: "", freight: "", freightCarrier: "", notes: "", priority: false })
     setItems([{ productType: "", value: "" }])
     setError("")
   }
@@ -834,6 +873,11 @@ function NewOrderDialog({ open, onClose, onSubmit, customerNames }: NewOrderDial
               <Input type="date" value={form.dueDate} onChange={(e) => { setForm({ ...form, dueDate: e.target.value }); setError("") }} />
             </div>
           </div>
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <Checkbox checked={form.priority} onCheckedChange={(checked) => setForm({ ...form, priority: checked === true })} />
+            <Star className="h-4 w-4 text-amber-600" />
+            <span className="text-sm font-medium">Priority order</span>
+          </label>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Freight Method</Label>
