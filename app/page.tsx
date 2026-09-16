@@ -1048,7 +1048,15 @@ function AppContent() {
   const renderContent = () => {
     switch (activeSection) {
       case "receival":
-        return <ReceivalForm inventory={activeInventory} onSubmit={handleReceivalSubmit} onError={showMessage} />
+        return (
+          <ReceivalForm
+            inventory={activeInventory}
+            onSubmit={handleReceivalSubmit}
+            onError={showMessage}
+            onRawMaterialAdd={handleRawMaterialAdd}
+            onRawMaterialCleaning={handleRawMaterialCleaning}
+          />
+        )
       case "processing":
         return (
           <ProcessingForms
@@ -1059,8 +1067,6 @@ function AppContent() {
               logAction(user.name, user.role, "Created Processing", "Additional", "Additional processing record submitted")
               showMessage("Additional processing record saved!")
             }}
-            onRawMaterialAdd={handleRawMaterialAdd}
-            onRawMaterialCleaning={handleRawMaterialCleaning}
             editRun={editingProcessingRun}
             onUpdate={handleProcessingRunUpdate}
             onCancelEdit={() => { setEditingProcessingRun(null); setActiveSection("records") }}
