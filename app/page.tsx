@@ -41,10 +41,10 @@ import { OrderManagement } from "@/components/order-management"
 import { AuditLogView } from "@/components/audit-log-view"
 import { ProcessingAnalytics } from "@/components/processing-analytics"
 import { AssistantChat } from "@/components/assistant-chat"
-import { formatDate, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
+import { formatDate, formatProductQuantity, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
-import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, OrderStatus, ProcessingRun, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
+import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, OrderStatus, ProcessingRun, ProcessingFormData, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
 
 interface PackingSlipData {
   number: string
@@ -103,7 +103,7 @@ function openPackingSlip(data: PackingSlipData) {
     <tr>
       <td>${escapePackingSlipValue(product.productType)}</td>
       <td class="batch">${escapePackingSlipValue(product.batchCode)}</td>
-      <td class="quantity">${escapePackingSlipValue(formatQuantity(product.weight))} kg</td>
+      <td class="quantity">${escapePackingSlipValue(formatProductQuantity(product.weight, product.productType))}</td>
     </tr>
   `).join("")
 
@@ -339,7 +339,7 @@ function AppContent() {
   }
 
   const handleProcessingSubmit = (
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
+    formData: ProcessingFormData,
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -373,6 +373,8 @@ function AppContent() {
             addTotal(productType, product.mealProteinKg)
           }
         })
+      } else if (processType === "oil-filtering") {
+        finishedProducts.forEach((product) => addTotal("Hemp Oil (Filtered)", product.oil))
       } else if (processType === "milling") {
         finishedProducts.forEach((product) => {
           addTotal("Hemp Protein Powder (50)", product.protein50)
@@ -406,6 +408,7 @@ function AppContent() {
         "whole-seeds": "Whole Seeds",
         "hulled-seeds": "Hulled Seeds",
         "hemp-hearts": "Hemp Hearts",
+        "hemp-oil-raw": "Hemp Oil (Raw)",
         "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)",
         "hemp-protein-cake": "Hemp Protein Chips (Light)",
         lights: "Hemp Lights",
@@ -474,7 +477,7 @@ function AppContent() {
         id: generateId("REC"),
         type: "Processing",
         date: formData.date,
-        productType: processType === "combining" ? "Batch Combination" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
+        productType: processType === "combining" ? "Batch Combination" : processType === "oil-filtering" ? "Oil Filtering Processing" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
         batchCode: formData.batchId,
         quantity: totalKg,
         processor: processType === "combining" ? user.name : `${formData.staffNames} (${formData.staffCount} staff)`,
@@ -483,7 +486,9 @@ function AppContent() {
       }
       setRecords((prev) => [...prev, newRecord])
       supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, processor: newRecord.processor, status: newRecord.status, processing_run_id: runId }).then()
-      const outputs = newInventoryItems.map(item => ({ productType: item.productType, kg: item.quantity }))
+      const outputs = newInventoryItems.map((item) => processType === "oil-filtering"
+        ? { productType: item.productType, litres: item.quantity }
+        : { productType: item.productType, kg: item.quantity })
       // Save the entire form snapshot so it can be reopened and edited later
       const formSnapshot = {
         staffCount: formData.staffCount,
@@ -493,7 +498,10 @@ function AppContent() {
         millingRoute: formData.millingRoute || "",
         equipment: formData.equipment || "",
         sieveDetails: formData.sieveDetails || "",
-        processingLossKg: roundQuantity(Math.max(0, totalKg - outputs.reduce((sum, output) => sum + output.kg, 0))),
+        oilFilteringDetails: formData.oilFilteringDetails,
+        ...(processType === "oil-filtering" ? {} : {
+          processingLossKg: roundQuantity(Math.max(0, totalKg - newInventoryItems.reduce((sum, item) => sum + item.quantity, 0))),
+        }),
         bulkProducts: normalizeBulkProductQuantities(bulkProducts),
         finishedProducts: normalizeFinishedProductQuantities(finishedProducts),
       }
@@ -507,16 +515,18 @@ function AppContent() {
         form_data: formSnapshot,
       }).then()
       logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${formatQuantity(totalKg)} kg input, ${newInventoryItems.length} outputs created`)
-      showMessage(processType === "combining" ? "Combined batch created successfully!" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
+      showMessage(processType === "combining" ? "Combined batch created successfully!" : `${processType === "oil-filtering" ? "Oil filtering" : processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
       onCommitted?.()
     }
 
     const totalKg = roundQuantity(bulkProducts.reduce((sum, p) => sum + (Number.parseFloat(p.kg) || 0), 0))
     setConfirmAction({
-      title: processType === "combining" ? "Confirm Batch Combination" : `Confirm ${processType.charAt(0).toUpperCase() + processType.slice(1)} Record`,
+      title: processType === "combining" ? "Confirm Batch Combination" : `Confirm ${processType === "oil-filtering" ? "Oil Filtering" : processType.charAt(0).toUpperCase() + processType.slice(1)} Record`,
       description: processType === "combining"
         ? `This will deduct ${formatQuantity(totalKg)} kg from the selected source batches and create batch ${formData.batchId}. The source genealogy will be saved.`
-        : `This will deduct ${formatQuantity(totalKg)} kg from input batches and create finished product inventory items. This action is recorded in the audit log.`,
+        : processType === "oil-filtering"
+          ? `This will deduct ${formatQuantity(totalKg)} kg of raw oil from the selected input batches and create filtered-oil inventory in litres. This action is recorded in the audit log.`
+          : `This will deduct ${formatQuantity(totalKg)} kg from input batches and create finished product inventory items. This action is recorded in the audit log.`,
       onConfirm: doProcess,
     })
   }
@@ -660,7 +670,7 @@ function AppContent() {
       prev.map((i) => (i.id === id ? { ...i, ...roundedData, lastUpdated: new Date().toISOString() } : i))
     )
     supabase.from('inventory').update({ quantity: roundedData.quantity, location: roundedData.location, last_updated: new Date().toISOString() }).eq('id', id).then()
-    logAction(user.name, user.role, "Updated Inventory", item?.batchCode || id, `Quantity: ${formatQuantity(roundedData.quantity ?? item?.quantity ?? 0)} kg, Location: ${roundedData.location ?? item?.location}`)
+    logAction(user.name, user.role, "Updated Inventory", item?.batchCode || id, `Quantity: ${formatProductQuantity(roundedData.quantity ?? item?.quantity ?? 0, item?.productType || "")}, Location: ${roundedData.location ?? item?.location}`)
     showMessage("Record updated successfully!")
   }
 
@@ -695,7 +705,7 @@ function AppContent() {
       setRecords((prev) => [...prev, newRecord])
       supabase.from('inventory').update({ deleted: true, deleted_at: new Date().toISOString(), deleted_by: user.name }).eq('id', itemToDelete.id).then()
       supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, status: newRecord.status }).then()
-      logAction(user.name, user.role, "Deleted Inventory", itemToDelete.batchCode, `Soft-deleted ${itemToDelete.productType} — ${formatQuantity(itemToDelete.quantity)} kg from ${itemToDelete.location}`)
+      logAction(user.name, user.role, "Deleted Inventory", itemToDelete.batchCode, `Soft-deleted ${itemToDelete.productType} — ${formatProductQuantity(itemToDelete.quantity, itemToDelete.productType)} from ${itemToDelete.location}`)
       showMessage(`Inventory item ${itemToDelete.batchCode} deleted successfully!`)
     }
     setDeleteOpen(false)
@@ -711,7 +721,7 @@ function AppContent() {
       )
     )
     supabase.from('inventory').update({ deleted: false, deleted_at: null, deleted_by: null, last_updated: new Date().toISOString() }).eq('id', item.id).then()
-    logAction(user.name, user.role, "Restored Inventory", item.batchCode, `Restored ${item.productType} — ${formatQuantity(item.quantity)} kg`)
+    logAction(user.name, user.role, "Restored Inventory", item.batchCode, `Restored ${item.productType} — ${formatProductQuantity(item.quantity, item.productType)}`)
     showMessage(`Inventory item ${item.batchCode} restored!`)
   }
 
@@ -725,8 +735,9 @@ function AppContent() {
 
     if (!data) {
       // No saved snapshot — synthesize a minimal one from the record so the form still opens
-      const processType: "dehulling" | "pressing" | "milling" =
+      const processType: "dehulling" | "pressing" | "oil-filtering" | "milling" =
         record.productType.toLowerCase().includes("mill") ? "milling"
+          : record.productType.toLowerCase().includes("filter") ? "oil-filtering"
           : record.productType.toLowerCase().includes("press") ? "pressing" : "dehulling"
       const match = (record.processor || "").match(/^(.*?)\s*\((\d+)\s*staff\)\s*$/i)
       const staffNames = match ? match[1] : (record.processor || "")
@@ -758,6 +769,7 @@ function AppContent() {
         millingRoute: fd.millingRoute || "",
         equipment: fd.equipment || "",
         sieveDetails: fd.sieveDetails || "",
+        oilFilteringDetails: fd.oilFilteringDetails,
         bulkProducts: Array.isArray(fd.bulkProducts) && fd.bulkProducts.length
           ? normalizeBulkProductQuantities(fd.bulkProducts)
           : [{ bag: "", productType: "", kg: "", batchCode: "", notes: "" }],
@@ -772,7 +784,7 @@ function AppContent() {
 
   const handleProcessingRunUpdate = (
     runId: string,
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
+    formData: ProcessingFormData,
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -792,6 +804,7 @@ function AppContent() {
       millingRoute: formData.millingRoute || "",
       equipment: formData.equipment || "",
       sieveDetails: formData.sieveDetails || "",
+      oilFilteringDetails: formData.oilFilteringDetails,
       bulkProducts: normalizeBulkProductQuantities(bulkProducts),
       finishedProducts: normalizeFinishedProductQuantities(finishedProducts),
     }
@@ -800,6 +813,7 @@ function AppContent() {
       "whole-seeds": "Whole Seeds",
       "hulled-seeds": "Hulled Seeds",
       "hemp-hearts": "Hemp Hearts",
+      "hemp-oil-raw": "Hemp Oil (Raw)",
       "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)",
       "hemp-protein-cake": "Hemp Protein Chips (Light)",
       lights: "Hemp Lights",
@@ -837,6 +851,8 @@ function AppContent() {
           add("Hemp Oil (Raw)", product.oil)
           add(product.mealProtein === "protein" ? "Hemp Protein Chips (Light)" : "Hemp Meal Chips/Pellets (Dark)", product.mealProteinKg)
         })
+      } else if (runProcessType === "oil-filtering") {
+        products.forEach((product) => add("Hemp Oil (Filtered)", product.oil))
       } else if (runProcessType === "milling") {
         products.forEach((product) => {
           add("Hemp Protein Powder (50)", product.protein50)
@@ -910,7 +926,7 @@ function AppContent() {
 
       const revisedQuantity = item.quantity + delta
       if (revisedQuantity < -0.000001) {
-        inventoryError = `${productType} batch ${batchCode} only has ${formatQuantity(item.quantity)}kg available; this update needs ${formatQuantity(Math.abs(delta))}kg.`
+        inventoryError = `${productType} batch ${batchCode} only has ${formatProductQuantity(item.quantity, productType)} available; this update needs ${formatProductQuantity(Math.abs(delta), productType)}.`
         return
       }
       inventoryUpdates.set(item.id, roundQuantity(Math.max(0, revisedQuantity)))
@@ -942,10 +958,14 @@ function AppContent() {
       batch_id: formData.batchId,
       process_type: processType,
       total_input_kg: totalKg,
-      outputs: Object.entries(newOutputTotals).map(([productType, kg]) => ({ productType, kg })),
+      outputs: Object.entries(newOutputTotals).map(([productType, quantity]) => processType === "oil-filtering"
+        ? { productType, litres: quantity }
+        : { productType, kg: quantity }),
       form_data: {
         ...formSnapshot,
-        processingLossKg: roundQuantity(Math.max(0, totalKg - Object.values(newOutputTotals).reduce((sum, quantity) => sum + quantity, 0))),
+        ...(processType === "oil-filtering" ? {} : {
+          processingLossKg: roundQuantity(Math.max(0, totalKg - Object.values(newOutputTotals).reduce((sum, quantity) => sum + quantity, 0))),
+        }),
       },
     }).eq('id', runId).then()
 
@@ -957,7 +977,7 @@ function AppContent() {
         date: formData.date,
         batchCode: formData.batchId,
         quantity: totalKg,
-        productType: processType === "combining" ? "Batch Combination" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
+        productType: processType === "combining" ? "Batch Combination" : processType === "oil-filtering" ? "Oil Filtering Processing" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} Processing`,
         processor: processType === "combining" ? user.name : `${formData.staffNames} (${formData.staffCount} staff)`,
       }
       setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r)))
@@ -971,7 +991,7 @@ function AppContent() {
     }
 
     logAction(user.name, user.role, "Edited Processing", formData.batchId, `Updated ${processType} run — ${formatQuantity(totalKg)} kg total, ${bulkProducts.length} bulk lines, ${finishedProducts.length} finished lines`)
-    showMessage(processType === "combining" ? "Batch combination updated!" : `${processType.charAt(0).toUpperCase() + processType.slice(1)} record updated!`)
+    showMessage(processType === "combining" ? "Batch combination updated!" : `${processType === "oil-filtering" ? "Oil filtering" : processType.charAt(0).toUpperCase() + processType.slice(1)} record updated!`)
     setEditingProcessingRun(null)
     setActiveSection("records")
   }
@@ -983,14 +1003,14 @@ function AppContent() {
     }
     setConfirmAction({
       title: `Delete ${record.type} Record?`,
-      description: `This will soft-delete the ${record.type} record for batch ${record.batchCode} (${record.productType}, ${formatQuantity(record.quantity)} kg). It can be restored later by an admin. Inventory and ledger quantities are NOT retroactively adjusted.`,
+      description: `This will soft-delete the ${record.type} record for batch ${record.batchCode} (${record.productType}, ${formatProductQuantity(record.quantity, record.productType)}). It can be restored later by an admin. Inventory and ledger quantities are NOT retroactively adjusted.`,
       onConfirm: () => {
         const now = new Date().toISOString()
         setRecords((prev) =>
           prev.map((r) => (r.id === record.id ? { ...r, deleted: true, deletedAt: now, deletedBy: user.name } : r))
         )
         supabase.from('records').update({ deleted: true, deleted_at: now, deleted_by: user.name }).eq('id', record.id).then()
-        logAction(user.name, user.role, "Deleted Record", record.batchCode, `Soft-deleted ${record.type} record: ${record.productType} — ${formatQuantity(record.quantity)} kg`)
+        logAction(user.name, user.role, "Deleted Record", record.batchCode, `Soft-deleted ${record.type} record: ${record.productType} — ${formatProductQuantity(record.quantity, record.productType)}`)
         showMessage(`${record.type} record for ${record.batchCode} deleted.`)
       },
     })
@@ -1002,7 +1022,7 @@ function AppContent() {
       prev.map((r) => (r.id === record.id ? { ...r, deleted: false, deletedAt: undefined, deletedBy: undefined } : r))
     )
     supabase.from('records').update({ deleted: false, deleted_at: null, deleted_by: null }).eq('id', record.id).then()
-    logAction(user.name, user.role, "Restored Record", record.batchCode, `Restored ${record.type} record: ${record.productType} — ${formatQuantity(record.quantity)} kg`)
+    logAction(user.name, user.role, "Restored Record", record.batchCode, `Restored ${record.type} record: ${record.productType} — ${formatProductQuantity(record.quantity, record.productType)}`)
     showMessage(`${record.type} record for ${record.batchCode} restored.`)
   }
 
@@ -1155,8 +1175,7 @@ function AppContent() {
               handleOrdersChange(orders.map(updateOrder))
               setOutgoingPrefill(null)
             }
-            const totalKg = roundQuantity(products.reduce((s, p) => s + p.weight, 0))
-            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `${formatQuantity(totalKg)} kg to ${customerName} via ${freight || "N/A"}: ${products.map(p => `${p.productType} ${p.batchCode} ${formatQuantity(p.weight)}kg`).join(", ")}`)
+            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `To ${customerName} via ${freight || "N/A"}: ${products.map((product) => `${product.productType} ${product.batchCode} ${formatProductQuantity(product.weight, product.productType)}`).join(", ")}`)
             const packingSlipOpened = openPackingSlip({
               number: `PS-${dispatchDate.replaceAll("-", "")}-${Date.now().toString().slice(-6)}`,
               date: dispatchDate,
@@ -1232,7 +1251,7 @@ function AppContent() {
               customer: roundedUpdated.customer || null,
               status: roundedUpdated.status,
             }).eq('id', roundedUpdated.id).then()
-            logAction(user.name, user.role, "Edited Record", roundedUpdated.batchCode, `Modified ${roundedUpdated.type} record: ${roundedUpdated.productType} — ${formatQuantity(roundedUpdated.quantity)} kg`)
+            logAction(user.name, user.role, "Edited Record", roundedUpdated.batchCode, `Modified ${roundedUpdated.type} record: ${roundedUpdated.productType} — ${formatProductQuantity(roundedUpdated.quantity, roundedUpdated.productType)}`)
             showMessage(`Record ${roundedUpdated.batchCode} updated!`)
           }}
         />
@@ -1289,7 +1308,7 @@ function AppContent() {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove the inventory item &quot;{itemToDelete?.batchCode}&quot; (
-              {itemToDelete?.productType}) with {formatQuantity(itemToDelete?.quantity ?? 0)}kg from {itemToDelete?.location}.
+              {itemToDelete?.productType}) with {formatProductQuantity(itemToDelete?.quantity ?? 0, itemToDelete?.productType || "")} from {itemToDelete?.location}.
               The record will be kept and can be restored later.
             </AlertDialogDescription>
           </AlertDialogHeader>

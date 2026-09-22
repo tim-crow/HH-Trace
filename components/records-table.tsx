@@ -19,7 +19,7 @@ import {
 import { Edit, Search, Lock, Trash2, RotateCcw } from "lucide-react"
 import { HEMP_PRODUCTS, FINISHED_GOODS } from "@/lib/constants"
 import type { TransactionRecord } from "@/lib/types"
-import { formatDate, formatQuantity, roundQuantity } from "@/lib/utils"
+import { formatDate, formatProductQuantity, roundQuantity } from "@/lib/utils"
 
 interface RecordsTableProps {
   records: TransactionRecord[]
@@ -145,7 +145,7 @@ export function RecordsTable({ records, isAdmin, canManage, onRecordUpdate, onOp
                   </TableCell>
                   <TableCell className="font-medium">{record.productType}</TableCell>
                   <TableCell className="font-mono text-sm">{record.batchCode}</TableCell>
-                  <TableCell>{formatQuantity(record.quantity)} kg</TableCell>
+                  <TableCell>{formatProductQuantity(record.quantity, record.productType)}</TableCell>
                   <TableCell className="text-muted-foreground">{record.supplier || record.processor || record.customer || "—"}</TableCell>
                   <TableCell>
                     <Badge variant={record.status === "Completed" ? "success" : "warning"}>

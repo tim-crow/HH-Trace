@@ -16,7 +16,7 @@ import {
   Plus,
   Leaf,
 } from "lucide-react"
-import { cn, formatDate, formatDateTime, formatQuantity } from "@/lib/utils"
+import { cn, formatDate, formatDateTime, formatProductQuantity, formatQuantity, getProductUnit } from "@/lib/utils"
 import { loadAuditLog } from "@/lib/audit-log"
 import type { AuditEntry } from "@/lib/audit-log"
 import type { InventoryItem, Order, OrderStatus } from "@/lib/types"
@@ -43,7 +43,12 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
   const activeOrders = orders.filter((o) => !o.deleted)
   const openOrders = activeOrders.filter((o) => o.status !== "Dispatched")
   const overdueOrders = openOrders.filter((o) => o.dueDate < today)
-  const totalKg = inventory.reduce((sum, item) => sum + item.quantity, 0)
+  const totalKg = inventory
+    .filter((item) => getProductUnit(item.productType) === "kg")
+    .reduce((sum, item) => sum + item.quantity, 0)
+  const totalLitres = inventory
+    .filter((item) => getProductUnit(item.productType) === "L")
+    .reduce((sum, item) => sum + item.quantity, 0)
   const todayUpdated = inventory.filter((item) => item.lastUpdated.startsWith(today)).length
 
   // Low stock: aggregate by product type, threshold 50kg — except Packaging which is per-batch at 100 units
@@ -66,7 +71,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
       })
     totals.forEach((total, productType) => {
       if (total < 50) {
-        alerts.push({ label: productType, sublabel: `${formatQuantity(total)} kg total`, value: total, unit: "kg" })
+        alerts.push({ label: productType, sublabel: `${formatProductQuantity(total, productType)} total`, value: total, unit: getProductUnit(productType) })
       }
     })
 
@@ -180,7 +185,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
         />
         <StatCard
           label="Total Inventory"
-          value={`${formatQuantity(totalKg)} kg`}
+          value={`${formatQuantity(totalKg)} kg${totalLitres > 0 ? ` + ${formatQuantity(totalLitres)} L` : ""}`}
           description={`${inventory.length} active batches`}
           icon={Warehouse}
           onClick={() => onNavigate("inventory")}

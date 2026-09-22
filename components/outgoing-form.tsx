@@ -13,7 +13,7 @@ import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { HEMP_PRODUCTS, FINISHED_GOODS, BOX_SIZES, PALLET_SIZES, PRODUCT_UNIT_WEIGHTS } from "@/lib/constants"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
 import type { InventoryItem, Order } from "@/lib/types"
-import { formatQuantity, roundQuantity } from "@/lib/utils"
+import { formatProductQuantity, formatQuantity, getProductUnit, roundQuantity } from "@/lib/utils"
 
 interface ProductLine {
   productType: string
@@ -173,7 +173,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
         map.set(item.batchCode, (map.get(item.batchCode) || 0) + item.quantity)
       }
       return Array.from(map.entries()).map(([code, qty]) => ({
-        label: `${code} (${formatQuantity(qty)} kg available)`,
+        label: `${code} (${formatProductQuantity(qty, productType)} available)`,
         value: code,
         qty,
       }))
@@ -188,7 +188,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       if (isNaN(requested) || requested <= 0) return null
       const available = getAvailableStock(p.productType, p.batchCode)
       if (requested > available) {
-        return `Exceeds available stock (${formatQuantity(available)} kg available)`
+        return `Exceeds available stock (${formatProductQuantity(available, p.productType)} available)`
       }
       return null
     })
@@ -201,7 +201,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
         if (!p.productType.trim()) return `Line ${i + 1}: Product type is required`
         if (!p.batchCode.trim()) return `Line ${i + 1}: Batch code is required for ${p.productType}`
         if (!p.weight.trim() || !(parseFloat(p.weight) > 0)) {
-          return `Line ${i + 1}: Weight is required for ${p.productType}`
+          return `Line ${i + 1}: Quantity is required for ${p.productType}`
         }
         return null
       })
@@ -229,7 +229,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
         const requested = parseFloat(p.weight)
         const available = getAvailableStock(p.productType, p.batchCode)
         if (requested > available) {
-          return `Line ${i + 1}: Batch ${p.batchCode} requires ${formatQuantity(requested)} kg but only ${formatQuantity(available)} kg available`
+          return `Line ${i + 1}: Batch ${p.batchCode} requires ${formatProductQuantity(requested, p.productType)} but only ${formatProductQuantity(available, p.productType)} available`
         }
         return null
       })
@@ -339,6 +339,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
             {products.map((product, index) => {
               const batchOptions = getBatchCodesForProduct(product.productType)
               const batchSuggestions = batchOptions.map((b) => b.label)
+              const productUnit = getProductUnit(product.productType)
               return (
                 <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
                   <div className="space-y-1">
@@ -398,7 +399,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
                       </>
                     ) : (
                       <>
-                        <Label className="text-xs">Weight (kg)</Label>
+                        <Label className="text-xs">Quantity ({productUnit})</Label>
                         <Input type="number" min={0} step="0.1" value={product.weight} onChange={(e) => updateProduct(index, "weight", e.target.value)} />
                       </>
                     )}

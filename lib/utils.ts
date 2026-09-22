@@ -10,6 +10,14 @@ export function formatQuantity(value: number): string {
   return value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })
 }
 
+export function getProductUnit(productType: string): "kg" | "L" {
+  return productType === "Hemp Oil (Filtered)" ? "L" : "kg"
+}
+
+export function formatProductQuantity(value: number, productType: string): string {
+  return `${formatQuantity(value)} ${getProductUnit(productType)}`
+}
+
 /** Formats stored ISO dates consistently without shifting date-only values across time zones. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—"

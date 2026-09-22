@@ -12,7 +12,7 @@ import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { LOCATIONS } from "@/lib/constants"
 import { getOtherLocations, saveOtherLocation } from "@/lib/remembered-entries"
 import type { InventoryItem } from "@/lib/types"
-import { formatDate, formatDateTime, formatQuantity, roundQuantity } from "@/lib/utils"
+import { formatDate, formatDateTime, formatProductQuantity, formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface InventoryTableProps {
   inventory: InventoryItem[]
@@ -144,7 +144,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, canEdit, 
             <TableHeader>
               <TableRow>
                 <TableHead>Batch Code</TableHead>
-                <TableHead>Quantity (kg)</TableHead>
+                <TableHead>Quantity</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Last Updated</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -168,7 +168,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, canEdit, 
                       <div className="flex items-center gap-3">
                         <span className="text-base font-semibold">{productType.replace("Raw Material — ", "")}</span>
                         <Badge variant="secondary">
-                          {formatQuantity(productTotals.get(productType) || 0)} kg total
+                          {formatProductQuantity(productTotals.get(productType) || 0, productType)} total
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           {items.length} {items.length === 1 ? "batch" : "batches"}
@@ -189,7 +189,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, canEdit, 
                             className="w-24 h-8"
                           />
                         ) : (
-                          `${formatQuantity(item.quantity)} kg`
+                          formatProductQuantity(item.quantity, item.productType)
                         )}
                       </TableCell>
                       <TableCell>
@@ -282,7 +282,7 @@ export function InventoryTable({ inventory, onSave, onDelete, isAdmin, canEdit, 
                   <TableRow key={item.id} className="opacity-60">
                     <TableCell>{item.productType}</TableCell>
                     <TableCell className="font-mono text-sm">{item.batchCode}</TableCell>
-                    <TableCell>{formatQuantity(item.quantity)} kg</TableCell>
+                    <TableCell>{formatProductQuantity(item.quantity, item.productType)}</TableCell>
                     <TableCell>{item.deletedBy || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {item.deletedAt ? formatDateTime(item.deletedAt) : "—"}

@@ -4,7 +4,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Bot, X, Send, Sparkles, Loader2 } from "lucide-react"
-import { cn, formatDate, formatDateTime, formatQuantity } from "@/lib/utils"
+import { cn, formatDate, formatDateTime, formatProductQuantity, formatQuantity, getProductUnit } from "@/lib/utils"
 import type { InventoryItem, TransactionRecord } from "@/lib/types"
 
 interface Message {
@@ -52,16 +52,17 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
 
       // Inventory summary
       if (q.includes("inventory") && (q.includes("summary") || q.includes("overview") || q.includes("current"))) {
-        const totalKg = inventory.reduce((sum, item) => sum + item.quantity, 0)
+        const totalKg = inventory.filter((item) => getProductUnit(item.productType) === "kg").reduce((sum, item) => sum + item.quantity, 0)
+        const totalLitres = inventory.filter((item) => getProductUnit(item.productType) === "L").reduce((sum, item) => sum + item.quantity, 0)
         const byType: Record<string, number> = {}
         inventory.forEach((item) => {
           byType[item.productType] = (byType[item.productType] || 0) + item.quantity
         })
         const breakdown = Object.entries(byType)
           .sort((a, b) => b[1] - a[1])
-          .map(([type, qty]) => `• **${type}**: ${formatQuantity(qty)} kg`)
+          .map(([type, qty]) => `• **${type}**: ${formatProductQuantity(qty, type)}`)
           .join("\n")
-        return `📦 **Inventory Summary**\n\nTotal: **${formatQuantity(totalKg)} kg** across **${inventory.length}** batches.\n\n${breakdown}`
+        return `📦 **Inventory Summary**\n\nTotal: **${formatQuantity(totalKg)} kg${totalLitres > 0 ? ` + ${formatQuantity(totalLitres)} L` : ""}** across **${inventory.length}** batches.\n\n${breakdown}`
       }
 
       // Low stock / running low
@@ -69,14 +70,14 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         const lowItems = inventory.filter((item) => item.quantity < 50 && item.quantity > 0)
         const emptyItems = inventory.filter((item) => item.quantity === 0)
         if (lowItems.length === 0 && emptyItems.length === 0) {
-          return "✅ All batches are above 50 kg — nothing running low right now."
+          return "✅ All batches are above the stock threshold — nothing running low right now."
         }
         let response = "⚠️ **Low Stock Alert**\n\n"
         if (lowItems.length > 0) {
-          response += "**Below 50 kg:**\n" + lowItems.map((item) => `• ${item.productType} (${item.batchCode}): **${formatQuantity(item.quantity)} kg** — ${item.location}`).join("\n")
+          response += "**Below stock threshold:**\n" + lowItems.map((item) => `• ${item.productType} (${item.batchCode}): **${formatProductQuantity(item.quantity, item.productType)}** — ${item.location}`).join("\n")
         }
         if (emptyItems.length > 0) {
-          response += "\n\n**Depleted (0 kg):**\n" + emptyItems.map((item) => `• ${item.productType} (${item.batchCode}) — ${item.location}`).join("\n")
+          response += "\n\n**Depleted:**\n" + emptyItems.map((item) => `• ${item.productType} (${item.batchCode}) — ${item.location}`).join("\n")
         }
         return response
       }
@@ -121,9 +122,8 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
         if (items.length === 0) {
           return `No **${displayName}** found in current inventory.`
         }
-        const totalKg = items.reduce((sum, item) => sum + item.quantity, 0)
-        const list = items.map((item) => `• ${item.batchCode}: **${formatQuantity(item.quantity)} kg** — ${item.location}`).join("\n")
-        return `🔍 **${displayName}** — ${formatQuantity(totalKg)} kg total across ${items.length} batch${items.length > 1 ? "es" : ""}\n\n${list}`
+        const list = items.map((item) => `• ${item.batchCode}: **${formatProductQuantity(item.quantity, item.productType)}** — ${item.location}`).join("\n")
+        return `🔍 **${displayName}** — ${items.length} batch${items.length > 1 ? "es" : ""}\n\n${list}`
       }
 
       // Batch lookup
@@ -133,7 +133,7 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
           const code = batchMatch[1]
           const item = inventory.find((i) => i.batchCode.toLowerCase() === code.toLowerCase())
           if (item) {
-            return `🔍 **Batch ${item.batchCode}**\n\n• Product: ${item.productType}\n• Quantity: **${formatQuantity(item.quantity)} kg**\n• Location: ${item.location}\n• Last Updated: ${formatDateTime(item.lastUpdated)}`
+            return `🔍 **Batch ${item.batchCode}**\n\n• Product: ${item.productType}\n• Quantity: **${formatProductQuantity(item.quantity, item.productType)}**\n• Location: ${item.location}\n• Last Updated: ${formatDateTime(item.lastUpdated)}`
           }
           return `No batch matching "${code}" found in inventory.`
         }
@@ -141,15 +141,16 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
 
       // Location query
       if (q.includes("location") || q.includes("where") || q.includes("storage") || q.includes("factory") || q.includes("warehouse") || q.includes("cold storage")) {
-        const byLocation: Record<string, { count: number; totalKg: number }> = {}
+        const byLocation: Record<string, { count: number; totalKg: number; totalLitres: number }> = {}
         inventory.forEach((item) => {
-          if (!byLocation[item.location]) byLocation[item.location] = { count: 0, totalKg: 0 }
+          if (!byLocation[item.location]) byLocation[item.location] = { count: 0, totalKg: 0, totalLitres: 0 }
           byLocation[item.location].count++
-          byLocation[item.location].totalKg += item.quantity
+          if (getProductUnit(item.productType) === "L") byLocation[item.location].totalLitres += item.quantity
+          else byLocation[item.location].totalKg += item.quantity
         })
         const list = Object.entries(byLocation)
           .sort((a, b) => b[1].totalKg - a[1].totalKg)
-          .map(([loc, data]) => `• **${loc}**: ${data.count} batches, ${formatQuantity(data.totalKg)} kg`)
+          .map(([loc, data]) => `• **${loc}**: ${data.count} batches, ${formatQuantity(data.totalKg)} kg${data.totalLitres > 0 ? ` + ${formatQuantity(data.totalLitres)} L` : ""}`)
           .join("\n")
         return `📍 **Inventory by Location**\n\n${list}`
       }

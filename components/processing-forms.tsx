@@ -11,13 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Trash2, AlertCircle, X } from "lucide-react"
 import { HEMP_PRODUCTS, PROCESS_TYPES } from "@/lib/constants"
-import type { InventoryItem, BulkProduct, FinishedProduct, AvailableBatch, ProcessingRun } from "@/lib/types"
+import type { InventoryItem, BulkProduct, FinishedProduct, AvailableBatch, ProcessingRun, ProcessingFormData, OilFilteringDetails } from "@/lib/types"
 import { formatQuantity, roundQuantity } from "@/lib/utils"
 
 interface ProcessingFormsProps {
   inventory: InventoryItem[]
   onSubmit: (
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
+    formData: ProcessingFormData,
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -29,7 +29,7 @@ interface ProcessingFormsProps {
   editRun?: ProcessingRun | null
   onUpdate?: (
     runId: string,
-    formData: { date: string; batchId: string; staffCount: string; staffNames: string; notes: string; oilPressType?: string; millingRoute?: string; equipment?: string; sieveDetails?: string },
+    formData: ProcessingFormData,
     processType: string,
     bulkProducts: BulkProduct[],
     finishedProducts: FinishedProduct[],
@@ -41,6 +41,27 @@ const emptyBulk = (): BulkProduct => ({ bag: "", productType: "", kg: "", batchC
 const emptyFinished = (): FinishedProduct => ({ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "", protein50: "", protein65: "", fibreMeal: "", mealFlour: "" })
 const firstBulk = (): BulkProduct => ({ ...emptyBulk(), bag: "1" })
 const firstFinished = (): FinishedProduct => ({ ...emptyFinished(), bin: "1" })
+const emptyCleaningChecks = (): OilFilteringDetails["cleaningChecks"] => ({
+  oilPress: { cleaned: false, sanitised: false, maintenance: false },
+  conveyors: { cleaned: false, sanitised: false, maintenance: false },
+  hoppers: { cleaned: false, sanitised: false, maintenance: false },
+  generalArea: { cleaned: false, sanitised: false, maintenance: false },
+})
+const emptyOilFilteringDetails = (): OilFilteringDetails => ({
+  gmpInspection: "",
+  gmpCorrectiveAction: "",
+  glassHardPlasticsCheck: "",
+  glassCorrectiveAction: "",
+  startTime: "",
+  endTime: "",
+  totalManHours: "",
+  inputNotes: "",
+  cleaningChecks: emptyCleaningChecks(),
+  labelsCheckedByQa: false,
+  comments: "",
+  supervisorName: "",
+  supervisorSignature: "",
+})
 
 export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubmit, editRun, onUpdate, onCancelEdit }: ProcessingFormsProps) {
   // Per-tab state (so dehulling and pressing don't share rows when not editing)
@@ -60,6 +81,14 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
   const [pressStaffNames, setPressStaffNames] = React.useState("")
   const [pressNotes, setPressNotes] = React.useState("")
   const [pressOilType, setPressOilType] = React.useState("")
+
+  const [filterBulk, setFilterBulk] = React.useState<BulkProduct[]>([{ ...firstBulk(), productType: "hemp-oil-raw" }])
+  const [filterFinished, setFilterFinished] = React.useState<FinishedProduct[]>([firstFinished()])
+  const [filterDate, setFilterDate] = React.useState("")
+  const [filterBatch, setFilterBatch] = React.useState("")
+  const [filterStaffCount, setFilterStaffCount] = React.useState("")
+  const [filterStaffNames, setFilterStaffNames] = React.useState("")
+  const [filterDetails, setFilterDetails] = React.useState<OilFilteringDetails>(emptyOilFilteringDetails)
 
   const [millingBulk, setMillingBulk] = React.useState<BulkProduct[]>([firstBulk()])
   const [millingFinished, setMillingFinished] = React.useState<FinishedProduct[]>([firstFinished()])
@@ -103,6 +132,22 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       setPressOilType(editRun.oilPressType || "")
       setPressBulk(editRun.bulkProducts.length ? editRun.bulkProducts.map((p) => ({ ...p })) : [emptyBulk()])
       setPressFinished(editRun.finishedProducts.length ? editRun.finishedProducts.map((p) => ({ ...p })) : [emptyFinished()])
+    } else if (editRun.processType === "oil-filtering") {
+      setActiveTab("oil-filtering")
+      setFilterDate(editRun.date)
+      setFilterBatch(editRun.batchId)
+      setFilterStaffCount(editRun.staffCount)
+      setFilterStaffNames(editRun.staffNames)
+      setFilterDetails(editRun.oilFilteringDetails
+        ? { ...editRun.oilFilteringDetails, cleaningChecks: {
+          ...emptyCleaningChecks(),
+          ...editRun.oilFilteringDetails.cleaningChecks,
+        } }
+        : emptyOilFilteringDetails())
+      setFilterBulk(editRun.bulkProducts.length
+        ? editRun.bulkProducts.map((product) => ({ ...product, productType: "hemp-oil-raw" }))
+        : [{ ...firstBulk(), productType: "hemp-oil-raw" }])
+      setFilterFinished(editRun.finishedProducts.length ? editRun.finishedProducts.map((p) => ({ ...p })) : [firstFinished()])
     } else if (editRun.processType === "milling") {
       setActiveTab("milling")
       setMillingDate(editRun.date)
@@ -134,7 +179,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
 
   const getAvailableBatches = (productType: string): AvailableBatch[] => {
     if (!productType) return []
-    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)", "hemp-protein-cake": "Hemp Protein Chips (Light)", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
+    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", "hemp-oil-raw": "Hemp Oil (Raw)", "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)", "hemp-protein-cake": "Hemp Protein Chips (Light)", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
     const displayName = productTypeMap[productType] || productType
     return inventory
       .filter((item) => item.productType === displayName && item.quantity > 0 && item.location === "Factory")
@@ -183,6 +228,69 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       onSubmit(formData, "pressing", pressBulk, pressFinished)
       setPressDate(""); setPressBatch(""); setPressStaffCount(""); setPressStaffNames(""); setPressNotes(""); setPressOilType("")
       setPressBulk([firstBulk()]); setPressFinished([firstFinished()])
+    }
+  }
+  const handleOilFilteringSubmit = () => {
+    if (!filterDate || !filterBatch.trim() || Number.parseInt(filterStaffCount, 10) <= 0 || !filterStaffNames.trim()) {
+      onError("Enter the date, output batch and staff details.")
+      return
+    }
+    if (!filterDetails.gmpInspection || !filterDetails.glassHardPlasticsCheck) {
+      onError("Complete both the GMP inspection and glass and hard plastics check.")
+      return
+    }
+    if (filterDetails.gmpInspection === "no" && !filterDetails.gmpCorrectiveAction.trim()) {
+      onError("Describe the corrective action taken after the failed GMP inspection.")
+      return
+    }
+    if (filterDetails.glassHardPlasticsCheck === "no" && !filterDetails.glassCorrectiveAction.trim()) {
+      onError("Describe the corrective action taken after the failed glass and hard plastics check.")
+      return
+    }
+    if (!filterDetails.startTime || !filterDetails.endTime || !(Number.parseFloat(filterDetails.totalManHours) > 0)) {
+      onError("Enter the start time, end time and total man hours.")
+      return
+    }
+    const completedInputs = filterBulk.filter((product) => product.batchCode && Number.parseFloat(product.kg) > 0)
+    if (!completedInputs.length || completedInputs.length !== filterBulk.length) {
+      onError("Every raw-oil input row must have a source batch and quantity greater than zero.")
+      return
+    }
+    if (!validateFactoryStock(completedInputs)) return
+    const completedOutputs = filterFinished.filter((product) => Number.parseFloat(product.oil) > 0)
+    if (!completedOutputs.length || completedOutputs.length !== filterFinished.length) {
+      onError("Every finished-product row must have a quantity in litres greater than zero.")
+      return
+    }
+    if (!filterDetails.supervisorName.trim() || !filterDetails.supervisorSignature.trim()) {
+      onError("Enter the supervisor name and signature or initials.")
+      return
+    }
+    if (
+      !isEditing &&
+      inventory.some((item) => !item.deleted && item.productType === "Hemp Oil (Filtered)" && item.batchCode === filterBatch.trim())
+    ) {
+      onError(`Filtered oil batch ${filterBatch.trim()} already exists. Edit the existing run or use a new output batch code.`)
+      return
+    }
+
+    const formData: ProcessingFormData = {
+      date: filterDate,
+      batchId: filterBatch.trim(),
+      staffCount: filterStaffCount,
+      staffNames: filterStaffNames.trim(),
+      notes: filterDetails.comments,
+      oilFilteringDetails: filterDetails,
+    }
+    if (isEditing && editRun && onUpdate) {
+      onUpdate(editRun.id, formData, "oil-filtering", completedInputs, completedOutputs)
+    } else {
+      onSubmit(formData, "oil-filtering", completedInputs, completedOutputs, () => {
+        setFilterDate(""); setFilterBatch(""); setFilterStaffCount(""); setFilterStaffNames("")
+        setFilterBulk([{ ...firstBulk(), productType: "hemp-oil-raw" }])
+        setFilterFinished([firstFinished()])
+        setFilterDetails(emptyOilFilteringDetails())
+      })
     }
   }
   const handleMillingSubmit = () => {
@@ -318,6 +426,8 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       : millingRoute === "meal-flour" ? (Number.parseFloat(millingFinished[0]?.mealFlour) || 0)
         : (Number.parseFloat(millingFinished[0]?.protein50) || 0) + (Number.parseFloat(millingFinished[0]?.fibreMeal) || 0)
   )
+  const filteringInputQuantity = roundQuantity(filterBulk.reduce((total, product) => total + (Number.parseFloat(product.kg) || 0), 0))
+  const filteringOutputLitres = roundQuantity(filterFinished.reduce((total, product) => total + (Number.parseFloat(product.oil) || 0), 0))
 
   return (
     <div className="space-y-6">
@@ -329,7 +439,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
           <p className="text-muted-foreground">
             {isEditing
               ? `Editing run ${editRun?.batchId} (${editRun?.processType}) — adjust any field including bin numbers, bag numbers, staff and yields`
-              : "Record dehulling, pressing, milling, sieving and additional processing activities"}
+              : "Record dehulling, pressing, oil filtering, milling, sieving and additional processing activities"}
           </p>
         </div>
         {isEditing && onCancelEdit && (
@@ -351,9 +461,10 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="dehulling" disabled={isEditing && editRun?.processType !== "dehulling"}>Dehulling</TabsTrigger>
           <TabsTrigger value="pressing" disabled={isEditing && editRun?.processType !== "pressing"}>Pressing</TabsTrigger>
+          <TabsTrigger value="oil-filtering" disabled={isEditing && editRun?.processType !== "oil-filtering"}>Oil Filtering</TabsTrigger>
           <TabsTrigger value="milling" disabled={isEditing && editRun?.processType !== "milling"}>Milling / Sieving</TabsTrigger>
           <TabsTrigger value="combining" disabled={isEditing && editRun?.processType !== "combining"}>Combine Batches</TabsTrigger>
           <TabsTrigger value="additional" disabled={isEditing}>Additional</TabsTrigger>
@@ -480,6 +591,130 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
               <Button onClick={handlePressingSubmit}>
                 {isEditing ? "Update Pressing Record" : "Submit Pressing Record"}
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="oil-filtering">
+          <Card>
+            <CardHeader>
+              <CardTitle>Oil Filtering Processing Form</CardTitle>
+              <CardDescription>Record raw-oil inputs, filtered-oil outputs, inspections, cleaning and supervisor sign-off</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2"><Label>Date *</Label><Input type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} /></div>
+                <div className="space-y-2"><Label>Product</Label><Input value="Hemp Oil" disabled /></div>
+                <div className="space-y-2"><Label>HH Batch ID *</Label><Input placeholder="Enter filtered oil batch ID" value={filterBatch} onChange={(event) => setFilterBatch(event.target.value)} /></div>
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-4">
+                <h4 className="text-sm font-semibold">Pre-Production Checks</h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>GMP inspection *</Label>
+                    <p className="text-xs text-muted-foreground">Machine, equipment and immediate area are clean and fit for purpose.</p>
+                    <Select value={filterDetails.gmpInspection} onValueChange={(value: "yes" | "no") => setFilterDetails((details) => ({ ...details, gmpInspection: value }))}>
+                      <SelectTrigger><SelectValue placeholder="Select Yes or No" /></SelectTrigger>
+                      <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Glass and hard plastics check *</Label>
+                    <Select value={filterDetails.glassHardPlasticsCheck} onValueChange={(value: "yes" | "no") => setFilterDetails((details) => ({ ...details, glassHardPlasticsCheck: value }))}>
+                      <SelectTrigger><SelectValue placeholder="Select Yes or No" /></SelectTrigger>
+                      <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {filterDetails.gmpInspection === "no" && (
+                  <div className="space-y-2"><Label>GMP corrective action *</Label><Textarea placeholder="Describe corrective action for the product and process" value={filterDetails.gmpCorrectiveAction} onChange={(event) => setFilterDetails((details) => ({ ...details, gmpCorrectiveAction: event.target.value }))} /></div>
+                )}
+                {filterDetails.glassHardPlasticsCheck === "no" && (
+                  <div className="space-y-2"><Label>Glass / hard plastics corrective action *</Label><Textarea placeholder="Describe the corrective action taken" value={filterDetails.glassCorrectiveAction} onChange={(event) => setFilterDetails((details) => ({ ...details, glassCorrectiveAction: event.target.value }))} /></div>
+                )}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2"><Label>Number of Staff *</Label><Input type="number" min={1} value={filterStaffCount} onChange={(event) => setFilterStaffCount(event.target.value)} /></div>
+                <div className="space-y-2"><Label>Names of Staff *</Label><Input placeholder="Enter staff names" value={filterStaffNames} onChange={(event) => setFilterStaffNames(event.target.value)} /></div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2"><Label>Start Time *</Label><Input type="time" value={filterDetails.startTime} onChange={(event) => setFilterDetails((details) => ({ ...details, startTime: event.target.value }))} /></div>
+                <div className="space-y-2"><Label>End Time *</Label><Input type="time" value={filterDetails.endTime} onChange={(event) => setFilterDetails((details) => ({ ...details, endTime: event.target.value }))} /></div>
+                <div className="space-y-2"><Label>Total Man Hours *</Label><Input type="number" min={0} step="0.1" value={filterDetails.totalManHours} onChange={(event) => setFilterDetails((details) => ({ ...details, totalManHours: event.target.value }))} /></div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-semibold">Hemp Oil Processed</h4>
+                    <p className="text-xs text-muted-foreground">Select raw-oil batch codes, including the S (Sally) or K (K8) suffix where used.</p>
+                  </div>
+                  <span className="text-sm text-muted-foreground">Total: {formatQuantity(filteringInputQuantity)} kg</span>
+                </div>
+                {filterBulk.map((product, index) => {
+                  const availableBatches = getAvailableBatches("hemp-oil-raw")
+                  return (
+                    <div key={index} className="grid gap-3 rounded-lg border bg-muted/50 p-4 md:grid-cols-[60px_1fr_1fr_auto]">
+                      <div className="space-y-1"><Label className="text-xs">#</Label><Input value={index + 1} disabled /></div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Raw Oil Batch *</Label>
+                        <Select value={product.batchCode} onValueChange={(value) => setFilterBulk((products) => products.map((item, itemIndex) => itemIndex === index ? { ...item, productType: "hemp-oil-raw", batchCode: value } : item))}>
+                          <SelectTrigger><SelectValue placeholder="Select source batch" /></SelectTrigger>
+                          <SelectContent>
+                            {availableBatches.map((batch) => <SelectItem key={batch.batchCode} value={batch.batchCode}>{batch.batchCode} ({formatQuantity(batch.quantity)} kg available)</SelectItem>)}
+                            {product.batchCode && !availableBatches.some((batch) => batch.batchCode === product.batchCode) && <SelectItem value={product.batchCode}>{product.batchCode} (saved)</SelectItem>}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1"><Label className="text-xs">Quantity (kg) *</Label><Input type="number" min={0} step="0.1" value={product.kg} onChange={(event) => setFilterBulk((products) => products.map((item, itemIndex) => itemIndex === index ? { ...item, productType: "hemp-oil-raw", kg: event.target.value } : item))} /></div>
+                      <div className="flex items-end"><Button variant="ghost" size="icon" className="text-destructive" disabled={filterBulk.length <= 1} onClick={() => removeAt(setFilterBulk, index)}><Trash2 className="h-4 w-4" /></Button></div>
+                    </div>
+                  )
+                })}
+                <Button variant="outline" size="sm" disabled={filterBulk.length >= 14} onClick={() => setFilterBulk((products) => [...products, { ...emptyBulk(), bag: String(products.length + 1), productType: "hemp-oil-raw" }])}><Plus className="mr-1 h-4 w-4" />Add Raw Oil Input</Button>
+                <div className="space-y-2"><Label>Input Notes</Label><Textarea placeholder="Record source or input observations" value={filterDetails.inputNotes} onChange={(event) => setFilterDetails((details) => ({ ...details, inputNotes: event.target.value }))} /></div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4"><h4 className="text-sm font-semibold">Finished Product</h4><span className="text-sm text-muted-foreground">Total: {formatQuantity(filteringOutputLitres)} L</span></div>
+                {filterFinished.map((product, index) => (
+                  <div key={index} className="grid gap-3 rounded-lg border bg-muted/50 p-4 md:grid-cols-[60px_1fr_2fr_auto]">
+                    <div className="space-y-1"><Label className="text-xs">#</Label><Input value={index + 1} disabled /></div>
+                    <div className="space-y-1"><Label className="text-xs">Litres *</Label><Input type="number" min={0} step="0.1" value={product.oil} onChange={(event) => updateFinished(setFilterFinished, index, "oil", event.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Notes (format, IBC, etc.)</Label><Input placeholder="e.g. IBC 1" value={product.notes || ""} onChange={(event) => updateFinished(setFilterFinished, index, "notes", event.target.value)} /></div>
+                    <div className="flex items-end"><Button variant="ghost" size="icon" className="text-destructive" disabled={filterFinished.length <= 1} onClick={() => removeAt(setFilterFinished, index)}><Trash2 className="h-4 w-4" /></Button></div>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" disabled={filterFinished.length >= 5} onClick={() => setFilterFinished((products) => [...products, { ...emptyFinished(), bin: String(products.length + 1) }])}><Plus className="mr-1 h-4 w-4" />Add Finished Product</Button>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold">Post-Production Cleaning and Maintenance Check</h4>
+                <div className="overflow-x-auto rounded-lg border">
+                  <div className="grid min-w-[680px] grid-cols-[180px_repeat(4,1fr)] text-sm">
+                    <div className="border-b bg-muted p-3 font-medium">Check</div>
+                    {[["oilPress", "Oil Press"], ["conveyors", "Conveyors"], ["hoppers", "Hoppers"], ["generalArea", "General Area"]].map(([area, label]) => <div key={area} className="border-b border-l bg-muted p-3 text-center font-medium">{label}</div>)}
+                    {[["cleaned", "Cleaned"], ["sanitised", "Sanitised"], ["maintenance", "Maintenance Check"]].flatMap(([check, label]) => [
+                      <div key={`${check}-label`} className="border-b p-3 font-medium last:border-b-0">{label}</div>,
+                      ...(["oilPress", "conveyors", "hoppers", "generalArea"] as const).map((area) => {
+                        const notApplicable = area === "generalArea" && check !== "cleaned"
+                        return <div key={`${area}-${check}`} className="flex items-center justify-center border-b border-l p-3 last:border-b-0">{notApplicable ? <span className="text-muted-foreground">N/A</span> : <Checkbox checked={filterDetails.cleaningChecks[area][check as "cleaned" | "sanitised" | "maintenance"]} onCheckedChange={(checked) => setFilterDetails((details) => ({ ...details, cleaningChecks: { ...details.cleaningChecks, [area]: { ...details.cleaningChecks[area], [check]: Boolean(checked) } } }))} />}</div>
+                      }),
+                    ])}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2"><Checkbox checked={filterDetails.labelsCheckedByQa} onCheckedChange={(checked) => setFilterDetails((details) => ({ ...details, labelsCheckedByQa: Boolean(checked) }))} /><Label>Labels Checked by QA Manager</Label></div>
+              <div className="space-y-2"><Label>Comments / Corrective Actions</Label><Textarea placeholder="Record comments, deviations or corrective actions" value={filterDetails.comments} onChange={(event) => setFilterDetails((details) => ({ ...details, comments: event.target.value }))} /></div>
+              <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-2">
+                <div className="space-y-2"><Label>Supervisor Name *</Label><Input value={filterDetails.supervisorName} onChange={(event) => setFilterDetails((details) => ({ ...details, supervisorName: event.target.value }))} /></div>
+                <div className="space-y-2"><Label>Supervisor Signature / Initials *</Label><Input value={filterDetails.supervisorSignature} onChange={(event) => setFilterDetails((details) => ({ ...details, supervisorSignature: event.target.value }))} /></div>
+              </div>
+
+              <Button onClick={handleOilFilteringSubmit}>{isEditing ? "Update Oil Filtering Record" : "Submit Oil Filtering Record"}</Button>
             </CardContent>
           </Card>
         </TabsContent>

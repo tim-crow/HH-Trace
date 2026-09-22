@@ -39,7 +39,7 @@ export interface ProcessingRun {
   id: string
   date: string
   batchId: string
-  processType: "dehulling" | "pressing" | "milling" | "combining"
+  processType: "dehulling" | "pressing" | "oil-filtering" | "milling" | "combining"
   staffCount: string
   staffNames: string
   notes: string
@@ -47,9 +47,39 @@ export interface ProcessingRun {
   millingRoute?: "protein-65" | "protein-50" | "meal-flour"
   equipment?: string
   sieveDetails?: string
+  oilFilteringDetails?: OilFilteringDetails
   bulkProducts: BulkProduct[]
   finishedProducts: FinishedProduct[]
   totalInputKg: number
+}
+
+export interface OilFilteringDetails {
+  gmpInspection: "" | "yes" | "no"
+  gmpCorrectiveAction: string
+  glassHardPlasticsCheck: "" | "yes" | "no"
+  glassCorrectiveAction: string
+  startTime: string
+  endTime: string
+  totalManHours: string
+  inputNotes: string
+  cleaningChecks: Record<"oilPress" | "conveyors" | "hoppers" | "generalArea", Record<"cleaned" | "sanitised" | "maintenance", boolean>>
+  labelsCheckedByQa: boolean
+  comments: string
+  supervisorName: string
+  supervisorSignature: string
+}
+
+export interface ProcessingFormData {
+  date: string
+  batchId: string
+  staffCount: string
+  staffNames: string
+  notes: string
+  oilPressType?: string
+  millingRoute?: string
+  equipment?: string
+  sieveDetails?: string
+  oilFilteringDetails?: OilFilteringDetails
 }
 
 export interface BulkProduct {
@@ -73,6 +103,7 @@ export interface FinishedProduct {
   protein65: string
   fibreMeal: string
   mealFlour: string
+  notes?: string
 }
 
 export interface RawMaterialAddData {
