@@ -17,7 +17,8 @@ import {
   Leaf,
 } from "lucide-react"
 import { cn, formatDate, formatDateTime, formatQuantity } from "@/lib/utils"
-import { getAuditLog } from "@/lib/audit-log"
+import { loadAuditLog } from "@/lib/audit-log"
+import type { AuditEntry } from "@/lib/audit-log"
 import type { InventoryItem, Order, OrderStatus } from "@/lib/types"
 
 interface DashboardProps {
@@ -37,6 +38,7 @@ const statusVariant = (status: OrderStatus): "default" | "secondary" | "warning"
 }
 
 export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
+  const [recentAudit, setRecentAudit] = React.useState<AuditEntry[]>([])
   const today = new Date().toISOString().split("T")[0]
   const activeOrders = orders.filter((o) => !o.deleted)
   const openOrders = activeOrders.filter((o) => o.status !== "Dispatched")
@@ -71,7 +73,13 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
     return alerts
   }, [inventory])
 
-  const recentAudit = React.useMemo(() => getAuditLog().reverse().slice(0, 5), [])
+  React.useEffect(() => {
+    let active = true
+    loadAuditLog().then((entries) => {
+      if (active) setRecentAudit(entries.slice(-5).reverse())
+    })
+    return () => { active = false }
+  }, [])
 
   // Australian financial quarter ends: Sep 30, Dec 31, Mar 31, Jun 30
   const stocktakeDue = React.useMemo(() => {

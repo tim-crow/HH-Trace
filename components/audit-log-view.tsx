@@ -6,12 +6,31 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Search } from "lucide-react"
-import { getAuditLog } from "@/lib/audit-log"
+import { loadAuditLog } from "@/lib/audit-log"
+import type { AuditEntry } from "@/lib/audit-log"
 import { formatDateTime } from "@/lib/utils"
 
 export function AuditLogView() {
   const [filter, setFilter] = React.useState("")
-  const entries = React.useMemo(() => getAuditLog().reverse(), [])
+  const [entries, setEntries] = React.useState<AuditEntry[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      const allEntries = await loadAuditLog()
+      if (active) {
+        setEntries([...allEntries].reverse())
+        setLoading(false)
+      }
+    }
+    refresh()
+    const interval = window.setInterval(refresh, 30000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [])
 
   const filtered = entries.filter(
     (e) =>
@@ -53,7 +72,7 @@ export function AuditLogView() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.slice(0, 100).map((entry) => (
+              {filtered.map((entry) => (
                 <TableRow key={entry.id}>
                   <TableCell className="whitespace-nowrap text-sm">
                     {formatDateTime(entry.timestamp)}
@@ -83,7 +102,7 @@ export function AuditLogView() {
               {filtered.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    {entries.length === 0 ? "No audit entries yet" : "No matching entries"}
+                    {loading ? "Loading activity..." : entries.length === 0 ? "No audit entries yet" : "No matching entries"}
                   </TableCell>
                 </TableRow>
               )}
