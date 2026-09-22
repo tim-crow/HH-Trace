@@ -45,6 +45,18 @@ export const PRODUCT_UNIT_WEIGHTS: Record<string, number> = {
   "Protein Powder 65 15kg": 15,
 }
 
+export const PRODUCT_INVENTORY_SOURCES: Record<string, string> = {
+  "Hemp Seeds 420g": "Hemp Hearts",
+  "Hemp Seeds 250g": "Hemp Hearts",
+  "Hemp Seeds 15kg": "Hemp Hearts",
+  "Oil 250ml": "Hemp Oil (Filtered)",
+  "Protein Powder 65 250g": "Hemp Protein Powder (65)",
+  "Protein Powder 65 420g": "Hemp Protein Powder (65)",
+  "Protein Powder 65 4.2kg": "Hemp Protein Powder (65)",
+  "Protein Powder 50 15kg": "Hemp Protein Powder (50)",
+  "Protein Powder 65 15kg": "Hemp Protein Powder (65)",
+}
+
 export const BOX_SIZES = [
   { label: "Large (30x30x40cm)", value: "Large 30x30x40cm" },
   { label: "15kg (43x31x24cm)", value: "15kg 43x31x24cm" },

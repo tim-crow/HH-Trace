@@ -11,7 +11,7 @@ export function formatQuantity(value: number): string {
 }
 
 export function getProductUnit(productType: string): "kg" | "L" {
-  return productType === "Hemp Oil (Filtered)" ? "L" : "kg"
+  return productType === "Hemp Oil (Filtered)" || productType === "Oil 250ml" ? "L" : "kg"
 }
 
 export function formatProductQuantity(value: number, productType: string): string {

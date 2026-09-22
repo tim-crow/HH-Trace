@@ -52,7 +52,7 @@ interface PackingSlipData {
   orderNumber?: string
   customer: string
   address: string
-  products: { productType: string; batchCode: string; weight: number }[]
+  products: { productType: string; inventoryProductType: string; batchCode: string; weight: number }[]
 }
 
 function normalizeOrderStatus(status: string): OrderStatus {
@@ -103,7 +103,7 @@ function openPackingSlip(data: PackingSlipData) {
     <tr>
       <td>${escapePackingSlipValue(product.productType)}</td>
       <td class="batch">${escapePackingSlipValue(product.batchCode)}</td>
-      <td class="quantity">${escapePackingSlipValue(formatProductQuantity(product.weight, product.productType))}</td>
+      <td class="quantity">${escapePackingSlipValue(formatProductQuantity(product.weight, product.inventoryProductType))}</td>
     </tr>
   `).join("")
 
@@ -1163,12 +1163,12 @@ function AppContent() {
           onSubmit={(products, customerName, customerAddress, freight, dispatchDate, fromOrderId) => {
             // Deduct the exact product + batch row. Multiple finished products can
             // share a processing batch code, so batch code alone is not unique.
-            const outgoingTotals = new Map<string, { productType: string; batchCode: string; quantity: number }>()
+            const outgoingTotals = new Map<string, { inventoryProductType: string; batchCode: string; quantity: number }>()
             products.forEach((p) => {
-              const key = `${p.productType}\u0000${p.batchCode}`
+              const key = `${p.inventoryProductType}\u0000${p.batchCode}`
               const existing = outgoingTotals.get(key)
               outgoingTotals.set(key, {
-                productType: p.productType,
+                inventoryProductType: p.inventoryProductType,
                 batchCode: p.batchCode,
                 quantity: roundQuantity((existing?.quantity || 0) + p.weight),
               })
@@ -1179,14 +1179,14 @@ function AppContent() {
             for (const outgoing of outgoingTotals.values()) {
               const matches = inventory.filter((candidate) =>
                 !candidate.deleted &&
-                candidate.productType === outgoing.productType &&
+                candidate.productType === outgoing.inventoryProductType &&
                 candidate.batchCode === outgoing.batchCode &&
                 candidate.location === "Factory"
               )
               const item = matches[0]
               const availableQuantity = roundQuantity(matches.reduce((total, match) => total + match.quantity, 0))
               if (!item || availableQuantity < outgoing.quantity) {
-                showMessage(`${outgoing.productType} batch ${outgoing.batchCode} does not have enough stock for this dispatch.`)
+                showMessage(`${outgoing.inventoryProductType} batch ${outgoing.batchCode} does not have enough stock for this dispatch.`)
                 return
               }
               outgoingUpdates.set(item.id, roundQuantity(availableQuantity - outgoing.quantity))
@@ -1241,7 +1241,7 @@ function AppContent() {
               handleOrdersChange(orders.map(updateOrder))
               setOutgoingPrefill(null)
             }
-            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `To ${customerName} via ${freight || "N/A"}: ${products.map((product) => `${product.productType} ${product.batchCode} ${formatProductQuantity(product.weight, product.productType)}`).join(", ")}`)
+            logAction(user.name, user.role, "Created Outgoing", "Dispatch", `To ${customerName} via ${freight || "N/A"}: ${products.map((product) => `${product.productType} from ${product.inventoryProductType} batch ${product.batchCode} — ${formatProductQuantity(product.weight, product.inventoryProductType)}`).join(", ")}`)
             const packingSlipOpened = openPackingSlip({
               number: `PS-${dispatchDate.replaceAll("-", "")}-${Date.now().toString().slice(-6)}`,
               date: dispatchDate,

@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2, AlertCircle } from "lucide-react"
 import { AutocompleteInput } from "@/components/ui/autocomplete-input"
-import { HEMP_PRODUCTS, FINISHED_GOODS, BOX_SIZES, PALLET_SIZES, PRODUCT_UNIT_WEIGHTS } from "@/lib/constants"
+import { HEMP_PRODUCTS, FINISHED_GOODS, BOX_SIZES, PALLET_SIZES, PRODUCT_INVENTORY_SOURCES, PRODUCT_UNIT_WEIGHTS } from "@/lib/constants"
 import { getCustomers, saveCustomer, getFreightCompanies, saveFreightCompany } from "@/lib/remembered-entries"
 import type { InventoryItem, Order } from "@/lib/types"
 import { formatProductQuantity, formatQuantity, getProductUnit, roundQuantity } from "@/lib/utils"
@@ -25,7 +25,7 @@ interface ProductLine {
 interface OutgoingFormProps {
   inventory: InventoryItem[]
   orders: Order[]
-  onSubmit: (products: {productType: string; batchCode: string; weight: number}[], customerName: string, customerAddress: string, freight: string, dispatchDate: string, fromOrderId?: string) => void
+  onSubmit: (products: {productType: string; inventoryProductType: string; batchCode: string; weight: number}[], customerName: string, customerAddress: string, freight: string, dispatchDate: string, fromOrderId?: string) => void
   onError: (msg: string) => void
   prefill?: {
     orderId: string
@@ -156,8 +156,9 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
 
   const getAvailableStock = React.useCallback(
     (productType: string, batchCode: string) => {
+      const inventoryProductType = PRODUCT_INVENTORY_SOURCES[productType] || productType
       return inventory
-        .filter((item) => item.productType === productType && item.batchCode === batchCode && item.location === "Factory" && !item.deleted)
+        .filter((item) => item.productType === inventoryProductType && item.batchCode === batchCode && item.location === "Factory" && !item.deleted)
         .reduce((sum, item) => sum + item.quantity, 0)
     },
     [inventory]
@@ -165,15 +166,16 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
 
   const getBatchCodesForProduct = React.useCallback(
     (productType: string) => {
+      const inventoryProductType = PRODUCT_INVENTORY_SOURCES[productType] || productType
       const items = inventory.filter(
-        (item) => item.productType === productType && item.location === "Factory" && !item.deleted && item.quantity > 0
+        (item) => item.productType === inventoryProductType && item.location === "Factory" && !item.deleted && item.quantity > 0
       )
       const map = new Map<string, number>()
       for (const item of items) {
         map.set(item.batchCode, (map.get(item.batchCode) || 0) + item.quantity)
       }
       return Array.from(map.entries()).map(([code, qty]) => ({
-        label: `${code} (${formatProductQuantity(qty, productType)} available)`,
+        label: `${code} (${formatProductQuantity(qty, inventoryProductType)} available)`,
         value: code,
         qty,
       }))
@@ -187,8 +189,9 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       const requested = parseFloat(p.weight)
       if (isNaN(requested) || requested <= 0) return null
       const available = getAvailableStock(p.productType, p.batchCode)
+      const inventoryProductType = PRODUCT_INVENTORY_SOURCES[p.productType] || p.productType
       if (requested > available) {
-        return `Exceeds available stock (${formatProductQuantity(available, p.productType)} available)`
+        return `Exceeds available stock (${formatProductQuantity(available, inventoryProductType)} available)`
       }
       return null
     })
@@ -228,8 +231,9 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
       .map((p, i) => {
         const requested = parseFloat(p.weight)
         const available = getAvailableStock(p.productType, p.batchCode)
+        const inventoryProductType = PRODUCT_INVENTORY_SOURCES[p.productType] || p.productType
         if (requested > available) {
-          return `Line ${i + 1}: Batch ${p.batchCode} requires ${formatProductQuantity(requested, p.productType)} but only ${formatProductQuantity(available, p.productType)} available`
+          return `Line ${i + 1}: Batch ${p.batchCode} requires ${formatProductQuantity(requested, inventoryProductType)} but only ${formatProductQuantity(available, inventoryProductType)} available`
         }
         return null
       })
@@ -266,6 +270,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
     onSubmit(
       products.map((p) => ({
         productType: p.productType,
+        inventoryProductType: PRODUCT_INVENTORY_SOURCES[p.productType] || p.productType,
         batchCode: p.batchCode,
         weight: roundQuantity(parseFloat(p.weight) || 0),
       })),
@@ -337,9 +342,10 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
           <div className="space-y-4">
             <h4 className="text-sm font-semibold">Product Details</h4>
             {products.map((product, index) => {
+              const inventoryProductType = PRODUCT_INVENTORY_SOURCES[product.productType] || product.productType
               const batchOptions = getBatchCodesForProduct(product.productType)
               const batchSuggestions = batchOptions.map((b) => b.label)
-              const productUnit = getProductUnit(product.productType)
+              const productUnit = getProductUnit(inventoryProductType)
               return (
                 <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 p-4 border rounded-lg bg-muted/50">
                   <div className="space-y-1">
@@ -373,6 +379,9 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
                         if (match) updateProduct(index, "batchCode", match.value)
                       }}
                     />
+                    {PRODUCT_INVENTORY_SOURCES[product.productType] && (
+                      <p className="text-xs text-muted-foreground">Draws from {inventoryProductType} inventory</p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     {product.productType && PRODUCT_UNIT_WEIGHTS[product.productType] ? (
@@ -394,7 +403,7 @@ export function OutgoingForm({ inventory, orders, onSubmit, onError, prefill }: 
                           }}
                         />
                         {product.units && (
-                          <p className="text-xs text-muted-foreground">= {formatQuantity(parseFloat(product.weight || "0"))} kg</p>
+                          <p className="text-xs text-muted-foreground">= {formatProductQuantity(parseFloat(product.weight || "0"), inventoryProductType)}</p>
                         )}
                       </>
                     ) : (
