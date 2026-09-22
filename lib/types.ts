@@ -54,19 +54,9 @@ export interface ProcessingRun {
 }
 
 export interface OilFilteringDetails {
-  gmpInspection: "" | "yes" | "no"
-  gmpCorrectiveAction: string
-  glassHardPlasticsCheck: "" | "yes" | "no"
-  glassCorrectiveAction: string
-  startTime: string
-  endTime: string
-  totalManHours: string
   inputNotes: string
-  cleaningChecks: Record<"oilPress" | "conveyors" | "hoppers" | "generalArea", Record<"cleaned" | "sanitised" | "maintenance", boolean>>
   labelsCheckedByQa: boolean
   comments: string
-  supervisorName: string
-  supervisorSignature: string
 }
 
 export interface ProcessingFormData {

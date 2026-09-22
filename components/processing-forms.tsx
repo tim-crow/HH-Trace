@@ -41,26 +41,10 @@ const emptyBulk = (): BulkProduct => ({ bag: "", productType: "", kg: "", batchC
 const emptyFinished = (): FinishedProduct => ({ bin: "", hearts: "", hulls: "", lights: "", overs: "", oil: "", mealProtein: "", mealProteinKg: "", protein50: "", protein65: "", fibreMeal: "", mealFlour: "" })
 const firstBulk = (): BulkProduct => ({ ...emptyBulk(), bag: "1" })
 const firstFinished = (): FinishedProduct => ({ ...emptyFinished(), bin: "1" })
-const emptyCleaningChecks = (): OilFilteringDetails["cleaningChecks"] => ({
-  oilPress: { cleaned: false, sanitised: false, maintenance: false },
-  conveyors: { cleaned: false, sanitised: false, maintenance: false },
-  hoppers: { cleaned: false, sanitised: false, maintenance: false },
-  generalArea: { cleaned: false, sanitised: false, maintenance: false },
-})
 const emptyOilFilteringDetails = (): OilFilteringDetails => ({
-  gmpInspection: "",
-  gmpCorrectiveAction: "",
-  glassHardPlasticsCheck: "",
-  glassCorrectiveAction: "",
-  startTime: "",
-  endTime: "",
-  totalManHours: "",
   inputNotes: "",
-  cleaningChecks: emptyCleaningChecks(),
   labelsCheckedByQa: false,
   comments: "",
-  supervisorName: "",
-  supervisorSignature: "",
 })
 
 export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubmit, editRun, onUpdate, onCancelEdit }: ProcessingFormsProps) {
@@ -139,10 +123,11 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       setFilterStaffCount(editRun.staffCount)
       setFilterStaffNames(editRun.staffNames)
       setFilterDetails(editRun.oilFilteringDetails
-        ? { ...editRun.oilFilteringDetails, cleaningChecks: {
-          ...emptyCleaningChecks(),
-          ...editRun.oilFilteringDetails.cleaningChecks,
-        } }
+        ? {
+          inputNotes: editRun.oilFilteringDetails.inputNotes || "",
+          labelsCheckedByQa: Boolean(editRun.oilFilteringDetails.labelsCheckedByQa),
+          comments: editRun.oilFilteringDetails.comments || "",
+        }
         : emptyOilFilteringDetails())
       setFilterBulk(editRun.bulkProducts.length
         ? editRun.bulkProducts.map((product) => ({ ...product, productType: "hemp-oil-raw" }))
@@ -235,22 +220,6 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       onError("Enter the date, output batch and staff details.")
       return
     }
-    if (!filterDetails.gmpInspection || !filterDetails.glassHardPlasticsCheck) {
-      onError("Complete both the GMP inspection and glass and hard plastics check.")
-      return
-    }
-    if (filterDetails.gmpInspection === "no" && !filterDetails.gmpCorrectiveAction.trim()) {
-      onError("Describe the corrective action taken after the failed GMP inspection.")
-      return
-    }
-    if (filterDetails.glassHardPlasticsCheck === "no" && !filterDetails.glassCorrectiveAction.trim()) {
-      onError("Describe the corrective action taken after the failed glass and hard plastics check.")
-      return
-    }
-    if (!filterDetails.startTime || !filterDetails.endTime || !(Number.parseFloat(filterDetails.totalManHours) > 0)) {
-      onError("Enter the start time, end time and total man hours.")
-      return
-    }
     const completedInputs = filterBulk.filter((product) => product.batchCode && Number.parseFloat(product.kg) > 0)
     if (!completedInputs.length || completedInputs.length !== filterBulk.length) {
       onError("Every raw-oil input row must have a source batch and quantity greater than zero.")
@@ -260,10 +229,6 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
     const completedOutputs = filterFinished.filter((product) => Number.parseFloat(product.oil) > 0)
     if (!completedOutputs.length || completedOutputs.length !== filterFinished.length) {
       onError("Every finished-product row must have a quantity in litres greater than zero.")
-      return
-    }
-    if (!filterDetails.supervisorName.trim() || !filterDetails.supervisorSignature.trim()) {
-      onError("Enter the supervisor name and signature or initials.")
       return
     }
     if (
@@ -599,7 +564,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
           <Card>
             <CardHeader>
               <CardTitle>Oil Filtering Processing Form</CardTitle>
-              <CardDescription>Record raw-oil inputs, filtered-oil outputs, inspections, cleaning and supervisor sign-off</CardDescription>
+              <CardDescription>Record raw-oil inputs and filtered-oil outputs</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-3">
@@ -608,49 +573,14 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 <div className="space-y-2"><Label>HH Batch ID *</Label><Input placeholder="Enter filtered oil batch ID" value={filterBatch} onChange={(event) => setFilterBatch(event.target.value)} /></div>
               </div>
 
-              <div className="rounded-lg border p-4 space-y-4">
-                <h4 className="text-sm font-semibold">Pre-Production Checks</h4>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>GMP inspection *</Label>
-                    <p className="text-xs text-muted-foreground">Machine, equipment and immediate area are clean and fit for purpose.</p>
-                    <Select value={filterDetails.gmpInspection} onValueChange={(value: "yes" | "no") => setFilterDetails((details) => ({ ...details, gmpInspection: value }))}>
-                      <SelectTrigger><SelectValue placeholder="Select Yes or No" /></SelectTrigger>
-                      <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Glass and hard plastics check *</Label>
-                    <Select value={filterDetails.glassHardPlasticsCheck} onValueChange={(value: "yes" | "no") => setFilterDetails((details) => ({ ...details, glassHardPlasticsCheck: value }))}>
-                      <SelectTrigger><SelectValue placeholder="Select Yes or No" /></SelectTrigger>
-                      <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                {filterDetails.gmpInspection === "no" && (
-                  <div className="space-y-2"><Label>GMP corrective action *</Label><Textarea placeholder="Describe corrective action for the product and process" value={filterDetails.gmpCorrectiveAction} onChange={(event) => setFilterDetails((details) => ({ ...details, gmpCorrectiveAction: event.target.value }))} /></div>
-                )}
-                {filterDetails.glassHardPlasticsCheck === "no" && (
-                  <div className="space-y-2"><Label>Glass / hard plastics corrective action *</Label><Textarea placeholder="Describe the corrective action taken" value={filterDetails.glassCorrectiveAction} onChange={(event) => setFilterDetails((details) => ({ ...details, glassCorrectiveAction: event.target.value }))} /></div>
-                )}
-              </div>
-
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2"><Label>Number of Staff *</Label><Input type="number" min={1} value={filterStaffCount} onChange={(event) => setFilterStaffCount(event.target.value)} /></div>
                 <div className="space-y-2"><Label>Names of Staff *</Label><Input placeholder="Enter staff names" value={filterStaffNames} onChange={(event) => setFilterStaffNames(event.target.value)} /></div>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2"><Label>Start Time *</Label><Input type="time" value={filterDetails.startTime} onChange={(event) => setFilterDetails((details) => ({ ...details, startTime: event.target.value }))} /></div>
-                <div className="space-y-2"><Label>End Time *</Label><Input type="time" value={filterDetails.endTime} onChange={(event) => setFilterDetails((details) => ({ ...details, endTime: event.target.value }))} /></div>
-                <div className="space-y-2"><Label>Total Man Hours *</Label><Input type="number" min={0} step="0.1" value={filterDetails.totalManHours} onChange={(event) => setFilterDetails((details) => ({ ...details, totalManHours: event.target.value }))} /></div>
-              </div>
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h4 className="text-sm font-semibold">Hemp Oil Processed</h4>
-                    <p className="text-xs text-muted-foreground">Select raw-oil batch codes, including the S (Sally) or K (K8) suffix where used.</p>
-                  </div>
+                  <h4 className="text-sm font-semibold">Hemp Oil Processed</h4>
                   <span className="text-sm text-muted-foreground">Total: {formatQuantity(filteringInputQuantity)} kg</span>
                 </div>
                 {filterBulk.map((product, index) => {
@@ -690,29 +620,8 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 <Button variant="outline" size="sm" disabled={filterFinished.length >= 5} onClick={() => setFilterFinished((products) => [...products, { ...emptyFinished(), bin: String(products.length + 1) }])}><Plus className="mr-1 h-4 w-4" />Add Finished Product</Button>
               </div>
 
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold">Post-Production Cleaning and Maintenance Check</h4>
-                <div className="overflow-x-auto rounded-lg border">
-                  <div className="grid min-w-[680px] grid-cols-[180px_repeat(4,1fr)] text-sm">
-                    <div className="border-b bg-muted p-3 font-medium">Check</div>
-                    {[["oilPress", "Oil Press"], ["conveyors", "Conveyors"], ["hoppers", "Hoppers"], ["generalArea", "General Area"]].map(([area, label]) => <div key={area} className="border-b border-l bg-muted p-3 text-center font-medium">{label}</div>)}
-                    {[["cleaned", "Cleaned"], ["sanitised", "Sanitised"], ["maintenance", "Maintenance Check"]].flatMap(([check, label]) => [
-                      <div key={`${check}-label`} className="border-b p-3 font-medium last:border-b-0">{label}</div>,
-                      ...(["oilPress", "conveyors", "hoppers", "generalArea"] as const).map((area) => {
-                        const notApplicable = area === "generalArea" && check !== "cleaned"
-                        return <div key={`${area}-${check}`} className="flex items-center justify-center border-b border-l p-3 last:border-b-0">{notApplicable ? <span className="text-muted-foreground">N/A</span> : <Checkbox checked={filterDetails.cleaningChecks[area][check as "cleaned" | "sanitised" | "maintenance"]} onCheckedChange={(checked) => setFilterDetails((details) => ({ ...details, cleaningChecks: { ...details.cleaningChecks, [area]: { ...details.cleaningChecks[area], [check]: Boolean(checked) } } }))} />}</div>
-                      }),
-                    ])}
-                  </div>
-                </div>
-              </div>
-
               <div className="flex items-center gap-2"><Checkbox checked={filterDetails.labelsCheckedByQa} onCheckedChange={(checked) => setFilterDetails((details) => ({ ...details, labelsCheckedByQa: Boolean(checked) }))} /><Label>Labels Checked by QA Manager</Label></div>
               <div className="space-y-2"><Label>Comments / Corrective Actions</Label><Textarea placeholder="Record comments, deviations or corrective actions" value={filterDetails.comments} onChange={(event) => setFilterDetails((details) => ({ ...details, comments: event.target.value }))} /></div>
-              <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-2">
-                <div className="space-y-2"><Label>Supervisor Name *</Label><Input value={filterDetails.supervisorName} onChange={(event) => setFilterDetails((details) => ({ ...details, supervisorName: event.target.value }))} /></div>
-                <div className="space-y-2"><Label>Supervisor Signature / Initials *</Label><Input value={filterDetails.supervisorSignature} onChange={(event) => setFilterDetails((details) => ({ ...details, supervisorSignature: event.target.value }))} /></div>
-              </div>
 
               <Button onClick={handleOilFilteringSubmit}>{isEditing ? "Update Oil Filtering Record" : "Submit Oil Filtering Record"}</Button>
             </CardContent>
