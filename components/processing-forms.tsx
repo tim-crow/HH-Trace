@@ -231,13 +231,6 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
       onError("Every finished-product row must have a quantity in litres greater than zero.")
       return
     }
-    if (
-      !isEditing &&
-      inventory.some((item) => !item.deleted && item.productType === "Hemp Oil (Filtered)" && item.batchCode === filterBatch.trim())
-    ) {
-      onError(`Filtered oil batch ${filterBatch.trim()} already exists. Edit the existing run or use a new output batch code.`)
-      return
-    }
 
     const formData: ProcessingFormData = {
       date: filterDate,
@@ -299,13 +292,6 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
     }
     if (outputQuantity > inputQuantity) {
       onError(`Outputs cannot exceed the ${formatQuantity(inputQuantity)} kg input quantity.`)
-      return
-    }
-    const outputProductTypes = millingRoute === "protein-65" ? ["Hemp Protein Powder (65)"]
-      : millingRoute === "meal-flour" ? ["Hemp Meal Flour"]
-        : ["Hemp Protein Powder (50)", "Hemp Fibre Meal (Sand)"]
-    if (!isEditing && inventory.some((item) => !item.deleted && item.batchCode === millingBatch.trim() && outputProductTypes.includes(item.productType))) {
-      onError(`Output batch ${millingBatch.trim()} already exists for this product. Edit the existing run or use a new output batch code.`)
       return
     }
     const formData = {

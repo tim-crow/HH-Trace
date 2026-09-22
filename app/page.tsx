@@ -289,20 +289,22 @@ function AppContent() {
       return false
     }
     const productType = formData.productType || "Whole Seeds"
-    const existingFactoryItems = source
-      ? inventory.filter((item) => !item.deleted && item.location === "Factory" && item.productType === productType && item.batchCode === formData.batchCode)
-      : []
-    if (existingFactoryItems.length > 1) {
-      showMessage(`${productType} batch ${formData.batchCode} has duplicate Factory inventory rows. Ask an admin to consolidate them before receiving more stock.`)
-      return false
-    }
-    const existingFactoryItem = existingFactoryItems[0]
+    const targetLocation = formData.location || "Factory"
+    const existingTargetItems = inventory.filter((item) =>
+      !item.deleted &&
+      item.location === targetLocation &&
+      item.productType === productType &&
+      item.batchCode === formData.batchCode
+    )
+    const existingTargetItem = existingTargetItems[0]
+    const duplicateTargetIds = new Set(existingTargetItems.slice(1).map((item) => item.id))
+    const existingQuantity = roundQuantity(existingTargetItems.reduce((total, item) => total + item.quantity, 0))
     const newItem: InventoryItem = {
-      id: existingFactoryItem?.id || generateId("INV"),
+      id: existingTargetItem?.id || generateId("INV"),
       productType,
       batchCode: formData.batchCode,
-      quantity: existingFactoryItem ? roundQuantity(existingFactoryItem.quantity + quantity) : quantity,
-      location: formData.location || "Factory",
+      quantity: existingTargetItem ? roundQuantity(existingQuantity + quantity) : quantity,
+      location: targetLocation,
       lastUpdated: new Date().toISOString(),
     }
     const newRecord: TransactionRecord = {
@@ -319,16 +321,23 @@ function AppContent() {
       const withSourceDeducted = source
         ? previous.map((item) => item.id === source.id ? { ...item, quantity: roundQuantity(item.quantity - quantity), lastUpdated: newItem.lastUpdated } : item)
         : previous
-      return existingFactoryItem
-        ? withSourceDeducted.map((item) => item.id === existingFactoryItem.id ? newItem : item)
+      return existingTargetItem
+        ? withSourceDeducted.map((item) => item.id === existingTargetItem.id
+          ? newItem
+          : duplicateTargetIds.has(item.id)
+            ? { ...item, quantity: 0, deleted: true, deletedAt: newItem.lastUpdated, deletedBy: user.name }
+            : item)
         : [...withSourceDeducted, newItem]
     })
     setRecords((prev) => [...prev, newRecord])
     if (source) {
       supabase.from('inventory').update({ quantity: roundQuantity(source.quantity - quantity), last_updated: newItem.lastUpdated }).eq('id', source.id).then()
     }
-    if (existingFactoryItem) {
-      supabase.from('inventory').update({ quantity: newItem.quantity, last_updated: newItem.lastUpdated }).eq('id', existingFactoryItem.id).then()
+    if (existingTargetItem) {
+      supabase.from('inventory').update({ quantity: newItem.quantity, last_updated: newItem.lastUpdated }).eq('id', existingTargetItem.id).then()
+      duplicateTargetIds.forEach((id) => {
+        supabase.from('inventory').update({ quantity: 0, deleted: true, deleted_at: newItem.lastUpdated, deleted_by: user.name }).eq('id', id).then()
+      })
     } else {
       supabase.from('inventory').insert({ id: newItem.id, product_type: newItem.productType, batch_code: newItem.batchCode, quantity: newItem.quantity, location: newItem.location, last_updated: newItem.lastUpdated }).then()
     }
@@ -347,6 +356,8 @@ function AppContent() {
   ) => {
     const doProcess = () => {
       const newInventoryItems: InventoryItem[] = []
+      const outputInventoryUpdates = new Map<string, { quantity: number; lastUpdated: string }>()
+      const consolidatedOutputIds = new Set<string>()
 
       // Aggregate yields across all bins so each product stays under the single
       // processing batch ID (e.g. all hemp hearts from batch 11226 → batchCode "11226").
@@ -394,13 +405,30 @@ function AppContent() {
       }
 
       Object.entries(totals).forEach(([productType, quantity]) => {
+        const now = new Date().toISOString()
+        const matches = inventory.filter((item) =>
+          !item.deleted &&
+          item.productType === productType &&
+          item.batchCode === formData.batchId &&
+          item.location === "Factory"
+        )
+        const existingItem = matches[0]
+        if (existingItem) {
+          const existingQuantity = matches.reduce((total, item) => total + item.quantity, 0)
+          outputInventoryUpdates.set(existingItem.id, {
+            quantity: roundQuantity(existingQuantity + quantity),
+            lastUpdated: now,
+          })
+          matches.slice(1).forEach((item) => consolidatedOutputIds.add(item.id))
+          return
+        }
         newInventoryItems.push({
           id: generateId("INV"),
           productType,
           batchCode: formData.batchId,
           quantity: roundQuantity(quantity),
           location: "Factory",
-          lastUpdated: new Date().toISOString(),
+          lastUpdated: now,
         })
       })
 
@@ -425,6 +453,7 @@ function AppContent() {
       })
 
       const inventoryUpdates = new Map<string, { quantity: number; lastUpdated: string }>()
+      const consolidatedInputIds = new Set<string>()
       let inputError = ""
       inputDeductions.forEach((quantity, key) => {
         const [productType, batchCode] = key.split("\u0000")
@@ -434,39 +463,69 @@ function AppContent() {
           candidate.batchCode === batchCode &&
           candidate.location === "Factory"
         )
-        if (matches.length > 1) {
-          inputError = `${productType} batch ${batchCode} has duplicate inventory rows. Ask an admin to consolidate them before processing.`
-          return
-        }
         const item = matches[0]
         if (!item) {
           inputError = `${productType} batch ${batchCode} is no longer available at Factory.`
           return
         }
-        if (item.quantity < quantity) {
-          inputError = `${productType} batch ${batchCode} only has ${formatQuantity(item.quantity)}kg available; ${formatQuantity(quantity)}kg was requested.`
+        const availableQuantity = roundQuantity(matches.reduce((total, match) => total + match.quantity, 0))
+        if (availableQuantity < quantity) {
+          inputError = `${productType} batch ${batchCode} only has ${formatQuantity(availableQuantity)}kg available; ${formatQuantity(quantity)}kg was requested.`
           return
         }
 
         const lastUpdated = new Date().toISOString()
-        const remainingQuantity = roundQuantity(item.quantity - quantity)
+        const remainingQuantity = roundQuantity(availableQuantity - quantity)
         inventoryUpdates.set(item.id, { quantity: remainingQuantity, lastUpdated })
+        matches.slice(1).forEach((match) => consolidatedInputIds.add(match.id))
       })
       if (inputError) {
         showMessage(inputError)
         return
       }
+      outputInventoryUpdates.forEach((outputUpdate, id) => {
+        const inputUpdate = inventoryUpdates.get(id)
+        const item = inventory.find((candidate) => candidate.id === id)
+        if (!inputUpdate || !item) return
+        outputInventoryUpdates.set(id, {
+          ...outputUpdate,
+          quantity: roundQuantity(inputUpdate.quantity + (totals[item.productType] || 0)),
+        })
+        inventoryUpdates.delete(id)
+      })
       inventoryUpdates.forEach((update, id) => {
         supabase.from('inventory').update({ quantity: update.quantity, last_updated: update.lastUpdated }).eq('id', id).then()
+      })
+      const consolidationTime = new Date().toISOString()
+      consolidatedInputIds.forEach((id) => {
+        supabase.from('inventory').update({ quantity: 0, deleted: true, deleted_at: consolidationTime, deleted_by: user.name }).eq('id', id).then()
       })
       setInventory((prev) =>
         prev.map((item) => {
           const update = inventoryUpdates.get(item.id)
-          return update ? { ...item, quantity: update.quantity, lastUpdated: update.lastUpdated } : item
+          if (update) return { ...item, quantity: update.quantity, lastUpdated: update.lastUpdated }
+          return consolidatedInputIds.has(item.id)
+            ? { ...item, quantity: 0, deleted: true, deletedAt: consolidationTime, deletedBy: user.name }
+            : item
         })
       )
 
-      setInventory((prev) => [...prev, ...newInventoryItems])
+      outputInventoryUpdates.forEach((update, id) => {
+        supabase.from('inventory').update({ quantity: update.quantity, last_updated: update.lastUpdated }).eq('id', id).then()
+      })
+      consolidatedOutputIds.forEach((id) => {
+        supabase.from('inventory').update({ quantity: 0, deleted: true, deleted_at: consolidationTime, deleted_by: user.name }).eq('id', id).then()
+      })
+      setInventory((prev) => [
+        ...prev.map((item) => {
+          const update = outputInventoryUpdates.get(item.id)
+          if (update) return { ...item, quantity: update.quantity, lastUpdated: update.lastUpdated }
+          return consolidatedOutputIds.has(item.id)
+            ? { ...item, quantity: 0, deleted: true, deletedAt: consolidationTime, deletedBy: user.name }
+            : item
+        }),
+        ...newInventoryItems,
+      ])
       newInventoryItems.forEach((item) => {
         supabase.from('inventory').insert({ id: item.id, product_type: item.productType, batch_code: item.batchCode, quantity: item.quantity, location: item.location, last_updated: item.lastUpdated }).then()
       })
@@ -486,9 +545,9 @@ function AppContent() {
       }
       setRecords((prev) => [...prev, newRecord])
       supabase.from('records').insert({ id: newRecord.id, type: newRecord.type, date: newRecord.date, product_type: newRecord.productType, batch_code: newRecord.batchCode, quantity: newRecord.quantity, processor: newRecord.processor, status: newRecord.status, processing_run_id: runId }).then()
-      const outputs = newInventoryItems.map((item) => processType === "oil-filtering"
-        ? { productType: item.productType, litres: item.quantity }
-        : { productType: item.productType, kg: item.quantity })
+      const outputs = Object.entries(totals).map(([productType, quantity]) => processType === "oil-filtering"
+        ? { productType, litres: roundQuantity(quantity) }
+        : { productType, kg: roundQuantity(quantity) })
       // Save the entire form snapshot so it can be reopened and edited later
       const formSnapshot = {
         staffCount: formData.staffCount,
@@ -500,7 +559,7 @@ function AppContent() {
         sieveDetails: formData.sieveDetails || "",
         oilFilteringDetails: formData.oilFilteringDetails,
         ...(processType === "oil-filtering" ? {} : {
-          processingLossKg: roundQuantity(Math.max(0, totalKg - newInventoryItems.reduce((sum, item) => sum + item.quantity, 0))),
+          processingLossKg: roundQuantity(Math.max(0, totalKg - Object.values(totals).reduce((sum, quantity) => sum + quantity, 0))),
         }),
         bulkProducts: normalizeBulkProductQuantities(bulkProducts),
         finishedProducts: normalizeFinishedProductQuantities(finishedProducts),
@@ -514,7 +573,7 @@ function AppContent() {
         outputs: outputs,
         form_data: formSnapshot,
       }).then()
-      logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${formatQuantity(totalKg)} kg input, ${newInventoryItems.length} outputs created`)
+      logAction(user.name, user.role, "Created Processing", formData.batchId, `${processType} — ${formatQuantity(totalKg)} kg input, ${Object.keys(totals).length} outputs created`)
       showMessage(processType === "combining" ? "Combined batch created successfully!" : `${processType === "oil-filtering" ? "Oil filtering" : processType.charAt(0).toUpperCase() + processType.slice(1)} record saved successfully!`)
       onCommitted?.()
     }
@@ -891,6 +950,7 @@ function AppContent() {
 
     const now = new Date().toISOString()
     const inventoryUpdates = new Map<string, number>()
+    const consolidatedInventoryIds = new Set<string>()
     const newInventoryItems: InventoryItem[] = []
     let inventoryError = ""
     inventoryDeltas.forEach((delta, key) => {
@@ -902,10 +962,6 @@ function AppContent() {
         candidate.batchCode === batchCode &&
         candidate.location === "Factory"
       )
-      if (matches.length > 1) {
-        inventoryError = `${productType} batch ${batchCode} has duplicate inventory rows. Ask an admin to consolidate them before updating this run.`
-        return
-      }
       const item = matches[0]
 
       if (!item) {
@@ -924,12 +980,14 @@ function AppContent() {
         return
       }
 
-      const revisedQuantity = item.quantity + delta
+      const existingQuantity = roundQuantity(matches.reduce((total, match) => total + match.quantity, 0))
+      const revisedQuantity = existingQuantity + delta
       if (revisedQuantity < -0.000001) {
-        inventoryError = `${productType} batch ${batchCode} only has ${formatProductQuantity(item.quantity, productType)} available; this update needs ${formatProductQuantity(Math.abs(delta), productType)}.`
+        inventoryError = `${productType} batch ${batchCode} only has ${formatProductQuantity(existingQuantity, productType)} available; this update needs ${formatProductQuantity(Math.abs(delta), productType)}.`
         return
       }
       inventoryUpdates.set(item.id, roundQuantity(Math.max(0, revisedQuantity)))
+      matches.slice(1).forEach((match) => consolidatedInventoryIds.add(match.id))
     })
 
     if (inventoryError) {
@@ -940,6 +998,9 @@ function AppContent() {
     inventoryUpdates.forEach((quantity, id) => {
       supabase.from('inventory').update({ quantity, last_updated: now }).eq('id', id).then()
     })
+    consolidatedInventoryIds.forEach((id) => {
+      supabase.from('inventory').update({ quantity: 0, deleted: true, deleted_at: now, deleted_by: user.name }).eq('id', id).then()
+    })
     newInventoryItems.forEach((item) => {
       supabase.from('inventory').insert({
         id: item.id, product_type: item.productType, batch_code: item.batchCode,
@@ -949,7 +1010,9 @@ function AppContent() {
     setInventory((prev) => [
       ...prev.map((item) => inventoryUpdates.has(item.id)
         ? { ...item, quantity: inventoryUpdates.get(item.id)!, lastUpdated: now }
-        : item),
+        : consolidatedInventoryIds.has(item.id)
+          ? { ...item, quantity: 0, deleted: true, deletedAt: now, deletedBy: user.name }
+          : item),
       ...newInventoryItems,
     ])
 
@@ -1112,6 +1175,7 @@ function AppContent() {
             })
             const now = new Date().toISOString()
             const outgoingUpdates = new Map<string, number>()
+            const consolidatedOutgoingIds = new Set<string>()
             for (const outgoing of outgoingTotals.values()) {
               const matches = inventory.filter((candidate) =>
                 !candidate.deleted &&
@@ -1119,25 +1183,27 @@ function AppContent() {
                 candidate.batchCode === outgoing.batchCode &&
                 candidate.location === "Factory"
               )
-              if (matches.length > 1) {
-                showMessage(`${outgoing.productType} batch ${outgoing.batchCode} has duplicate inventory rows. Ask an admin to consolidate them before dispatch.`)
-                return
-              }
               const item = matches[0]
-              if (!item || item.quantity < outgoing.quantity) {
+              const availableQuantity = roundQuantity(matches.reduce((total, match) => total + match.quantity, 0))
+              if (!item || availableQuantity < outgoing.quantity) {
                 showMessage(`${outgoing.productType} batch ${outgoing.batchCode} does not have enough stock for this dispatch.`)
                 return
               }
-              outgoingUpdates.set(item.id, roundQuantity(item.quantity - outgoing.quantity))
+              outgoingUpdates.set(item.id, roundQuantity(availableQuantity - outgoing.quantity))
+              matches.slice(1).forEach((match) => consolidatedOutgoingIds.add(match.id))
             }
             outgoingUpdates.forEach((quantity, id) => {
               supabase.from('inventory').update({ quantity, last_updated: now }).eq('id', id).then()
             })
-            setInventory((prev) => prev.map((item) =>
-              outgoingUpdates.has(item.id)
-                ? { ...item, quantity: outgoingUpdates.get(item.id)!, lastUpdated: now }
+            consolidatedOutgoingIds.forEach((id) => {
+              supabase.from('inventory').update({ quantity: 0, deleted: true, deleted_at: now, deleted_by: user.name }).eq('id', id).then()
+            })
+            setInventory((prev) => prev.map((item) => {
+              if (outgoingUpdates.has(item.id)) return { ...item, quantity: outgoingUpdates.get(item.id)!, lastUpdated: now }
+              return consolidatedOutgoingIds.has(item.id)
+                ? { ...item, quantity: 0, deleted: true, deletedAt: now, deletedBy: user.name }
                 : item
-            ))
+            }))
             // Create transaction records
             products.forEach((p) => {
               const newRecord: TransactionRecord = {
