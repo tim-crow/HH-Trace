@@ -18,9 +18,9 @@ export const HEMP_PRODUCTS = [
 ] as const
 
 export const FINISHED_GOODS = [
-  "Hemp Seeds 420g",
-  "Hemp Seeds 250g",
-  "Hemp Seeds 15kg",
+  "Hemp Hearts 420g",
+  "Hemp Hearts 250g",
+  "Hemp Hearts 15kg",
   "Oil 250ml",
   "Protein Powder 65 250g",
   "Protein Powder 65 420g",
@@ -34,9 +34,9 @@ export const PROCESS_TYPES = ["Blended", "Filtered", "Packed"] as const
 export const LOCATIONS = ["Factory", "Other"] as const
 
 export const PRODUCT_UNIT_WEIGHTS: Record<string, number> = {
-  "Hemp Seeds 420g": 0.42,
-  "Hemp Seeds 250g": 0.25,
-  "Hemp Seeds 15kg": 15,
+  "Hemp Hearts 420g": 0.42,
+  "Hemp Hearts 250g": 0.25,
+  "Hemp Hearts 15kg": 15,
   "Oil 250ml": 0.25,
   "Protein Powder 65 250g": 0.25,
   "Protein Powder 65 420g": 0.42,
@@ -46,15 +46,32 @@ export const PRODUCT_UNIT_WEIGHTS: Record<string, number> = {
 }
 
 export const PRODUCT_INVENTORY_SOURCES: Record<string, string> = {
-  "Hemp Seeds 420g": "Hemp Hearts",
-  "Hemp Seeds 250g": "Hemp Hearts",
-  "Hemp Seeds 15kg": "Hemp Hearts",
+  "Hemp Hearts 420g": "Hemp Hearts",
+  "Hemp Hearts 250g": "Hemp Hearts",
+  "Hemp Hearts 15kg": "Hemp Hearts",
   "Oil 250ml": "Hemp Oil (Filtered)",
   "Protein Powder 65 250g": "Hemp Protein Powder (65)",
   "Protein Powder 65 420g": "Hemp Protein Powder (65)",
   "Protein Powder 65 4.2kg": "Hemp Protein Powder (65)",
   "Protein Powder 50 15kg": "Hemp Protein Powder (50)",
   "Protein Powder 65 15kg": "Hemp Protein Powder (65)",
+}
+
+const PRODUCT_NAME_ALIASES: Record<string, string> = {
+  "Hulled Seeds": "Hemp Hearts",
+  "Hemp Seeds 420g": "Hemp Hearts 420g",
+  "Hemp Seeds 250g": "Hemp Hearts 250g",
+  "Hemp Seeds 15kg": "Hemp Hearts 15kg",
+}
+
+export function normalizeProductName(productType: string): string {
+  return PRODUCT_NAME_ALIASES[productType] || productType
+}
+
+export function normalizeProductText(value: string): string {
+  return value
+    .replace(/Hulled Seeds/gi, "Hemp Hearts")
+    .replace(/Hemp Seeds/gi, "Hemp Hearts")
 }
 
 export const BOX_SIZES = [

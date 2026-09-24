@@ -19,6 +19,7 @@ import {
 import { cn, formatDate, formatDateTime, formatProductQuantity, formatQuantity, getProductUnit } from "@/lib/utils"
 import { loadAuditLog } from "@/lib/audit-log"
 import type { AuditEntry } from "@/lib/audit-log"
+import { normalizeProductText } from "@/lib/constants"
 import type { InventoryItem, Order, OrderStatus } from "@/lib/types"
 
 interface DashboardProps {
@@ -325,7 +326,7 @@ export function Dashboard({ inventory, orders, onNavigate }: DashboardProps) {
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground truncate">
-                          {entry.action} — {entry.target}
+                          {entry.action} — {normalizeProductText(entry.target)}
                         </p>
                       </div>
                     ))}

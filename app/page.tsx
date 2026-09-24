@@ -44,6 +44,7 @@ import { AssistantChat } from "@/components/assistant-chat"
 import { formatDate, formatProductQuantity, formatQuantity, generateId, roundQuantity } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { loadAllSavedEntries } from "@/lib/remembered-entries"
+import { normalizeProductName, normalizeProductText } from "@/lib/constants"
 import type { InventoryItem, TransactionRecord, BulkProduct, FinishedProduct, Order, OrderItem, OrderStatus, ProcessingRun, ProcessingFormData, RawMaterialAddData, RawMaterialCleaningData } from "@/lib/types"
 
 interface PackingSlipData {
@@ -65,6 +66,7 @@ function normalizeOrderStatus(status: string): OrderStatus {
 function normalizeBulkProductQuantities(products: BulkProduct[]) {
   return products.map((product) => ({
     ...product,
+    productType: product.productType === "hulled-seeds" ? "hemp-hearts" : normalizeProductName(product.productType),
     kg: Number.isFinite(Number.parseFloat(product.kg)) ? String(roundQuantity(Number.parseFloat(product.kg))) : product.kg,
   }))
 }
@@ -179,14 +181,14 @@ function AppContent() {
   React.useEffect(() => {
     supabase.from('inventory').select('*').then(({ data }) => {
       if (data) setInventory(data.map((r: any) => ({
-        id: r.id, productType: r.product_type, batchCode: r.batch_code, quantity: r.quantity,
+        id: r.id, productType: normalizeProductName(r.product_type), batchCode: r.batch_code, quantity: r.quantity,
         location: r.location, lastUpdated: r.last_updated, deleted: r.deleted,
         deletedAt: r.deleted_at, deletedBy: r.deleted_by,
       })))
     })
     supabase.from('records').select('*').then(({ data }) => {
       if (data) setRecords(data.map((r: any) => ({
-        id: r.id, type: r.type, date: r.date, productType: r.product_type,
+        id: r.id, type: r.type, date: r.date, productType: normalizeProductName(r.product_type),
         batchCode: r.batch_code, quantity: r.quantity, supplier: r.supplier,
         processor: r.processor, customer: r.customer, status: r.status,
         processingRunId: r.processing_run_id || undefined,
@@ -203,8 +205,8 @@ function AppContent() {
         const priorityIds = new Set((priorityRows || []).map((r: any) => r.value))
         setOrders(orderRows.map((r: any) => ({
           id: r.id, orderNumber: r.order_number, customer: r.customer,
-          customerAddress: r.customer_address || "", details: r.details,
-          items: r.items || [],
+          customerAddress: r.customer_address || "", details: normalizeProductText(r.details || ""),
+          items: (r.items || []).map((item: OrderItem) => ({ ...item, productType: normalizeProductName(item.productType) })),
           dateReceived: r.date_received, dueDate: r.due_date,
           freight: r.freight, freightCarrier: r.freight_carrier,
           notes: r.notes || "", priority: priorityIds.has(r.id),
@@ -434,7 +436,7 @@ function AppContent() {
 
       const inputProductTypes: Record<string, string> = {
         "whole-seeds": "Whole Seeds",
-        "hulled-seeds": "Hulled Seeds",
+        "hulled-seeds": "Hemp Hearts",
         "hemp-hearts": "Hemp Hearts",
         "hemp-oil-raw": "Hemp Oil (Raw)",
         "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)",
@@ -870,7 +872,7 @@ function AppContent() {
 
     const inputProductTypes: Record<string, string> = {
       "whole-seeds": "Whole Seeds",
-      "hulled-seeds": "Hulled Seeds",
+      "hulled-seeds": "Hemp Hearts",
       "hemp-hearts": "Hemp Hearts",
       "hemp-oil-raw": "Hemp Oil (Raw)",
       "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)",

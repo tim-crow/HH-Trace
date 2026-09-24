@@ -114,11 +114,12 @@ export function AssistantChat({ inventory, records }: AssistantChatProps) {
       }
 
       // Specific product lookup
-      const productKeywords = ["whole seeds", "hulled seeds", "hemp hearts", "hemp oil", "hemp protein", "hemp meal", "hemp hulls", "hemp lights", "overs"]
-      const matchedProduct = productKeywords.find((p) => q.includes(p))
+      const productKeywords = ["whole seeds", "hemp hearts", "hulled seeds", "hemp seeds", "hemp oil", "hemp protein", "hemp meal", "hemp hulls", "hemp lights", "overs"]
+      const matchedProduct = productKeywords.find((product) => q.includes(product))
       if (matchedProduct) {
-        const displayName = matchedProduct.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
-        const items = inventory.filter((item) => item.productType.toLowerCase().includes(matchedProduct))
+        const inventoryProduct = ["hulled seeds", "hemp seeds"].includes(matchedProduct) ? "hemp hearts" : matchedProduct
+        const displayName = inventoryProduct.split(" ").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
+        const items = inventory.filter((item) => item.productType.toLowerCase().includes(inventoryProduct))
         if (items.length === 0) {
           return `No **${displayName}** found in current inventory.`
         }

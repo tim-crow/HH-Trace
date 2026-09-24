@@ -164,7 +164,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
 
   const getAvailableBatches = (productType: string): AvailableBatch[] => {
     if (!productType) return []
-    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hulled Seeds", "hemp-hearts": "Hemp Hearts", "hemp-oil-raw": "Hemp Oil (Raw)", "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)", "hemp-protein-cake": "Hemp Protein Chips (Light)", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
+    const productTypeMap: Record<string, string> = { "whole-seeds": "Whole Seeds", "hulled-seeds": "Hemp Hearts", "hemp-hearts": "Hemp Hearts", "hemp-oil-raw": "Hemp Oil (Raw)", "hemp-meal-cake": "Hemp Meal Chips/Pellets (Dark)", "hemp-protein-cake": "Hemp Protein Chips (Light)", lights: "Hemp Lights", overs: "Overs", seconds: "Seconds" }
     const displayName = productTypeMap[productType] || productType
     return inventory
       .filter((item) => item.productType === displayName && item.quantity > 0 && item.location === "Factory")
@@ -507,7 +507,7 @@ export function ProcessingForms({ inventory, onSubmit, onError, onAdditionalSubm
                 products={pressBulk}
                 onChange={setPressBulk}
                 getAvailableBatches={getAvailableBatches}
-                productOptions={[{ key: "hulled-seeds", label: "Hulled Seeds" }, { key: "lights", label: "Lights" }, { key: "overs", label: "Overs" }, { key: "seconds", label: "Seconds" }, { key: "whole-seeds", label: "Whole Seeds" }]}
+                productOptions={[{ key: "hemp-hearts", label: "Hemp Hearts" }, { key: "lights", label: "Lights" }, { key: "overs", label: "Overs" }, { key: "seconds", label: "Seconds" }, { key: "whole-seeds", label: "Whole Seeds" }]}
               />
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold">Finished Products (KG)</h4>

@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search } from "lucide-react"
 import { loadAuditLog } from "@/lib/audit-log"
 import type { AuditEntry } from "@/lib/audit-log"
+import { normalizeProductText } from "@/lib/constants"
 import { formatDateTime } from "@/lib/utils"
 
 export function AuditLogView() {
@@ -36,8 +37,8 @@ export function AuditLogView() {
     (e) =>
       e.userName.toLowerCase().includes(filter.toLowerCase()) ||
       e.action.toLowerCase().includes(filter.toLowerCase()) ||
-      e.target.toLowerCase().includes(filter.toLowerCase()) ||
-      e.details.toLowerCase().includes(filter.toLowerCase())
+      normalizeProductText(e.target).toLowerCase().includes(filter.toLowerCase()) ||
+      normalizeProductText(e.details).toLowerCase().includes(filter.toLowerCase())
   )
 
   return (
@@ -95,8 +96,8 @@ export function AuditLogView() {
                       {entry.action}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{entry.target}</TableCell>
-                  <TableCell className="max-w-[300px] truncate text-sm text-muted-foreground">{entry.details}</TableCell>
+                  <TableCell className="font-mono text-sm">{normalizeProductText(entry.target)}</TableCell>
+                  <TableCell className="max-w-[300px] truncate text-sm text-muted-foreground">{normalizeProductText(entry.details)}</TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
