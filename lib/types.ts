@@ -44,7 +44,7 @@ export interface ProcessingRun {
   staffNames: string
   notes: string
   oilPressType?: string
-  millingRoute?: "protein-65" | "protein-50" | "meal-flour"
+  millingRoute?: "protein-65" | "meal-flour" | "sieving" | "protein-50" // "protein-50" = legacy combined milling + sieving run
   equipment?: string
   sieveDetails?: string
   oilFilteringDetails?: OilFilteringDetails
