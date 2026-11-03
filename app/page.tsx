@@ -225,9 +225,9 @@ function AppContent() {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [confirmAction, setConfirmAction] = React.useState<{ title: string; description: string; onConfirm: () => void } | null>(null)
 
-  // Auto-revert: if the user moved an order to "Ready to Ship" (which redirected to the
+  // Auto-revert: if the user moved an order to "Dispatched" (which redirected to the
   // Outgoing form) but then navigated away without submitting a dispatch record,
-  // put the order back at "In Progress".
+  // put the order back at its previous status.
   const prevActiveSection = React.useRef(activeSection)
   React.useEffect(() => {
     const leftOutgoing = prevActiveSection.current === "outgoing" && activeSection !== "outgoing"
@@ -243,7 +243,7 @@ function AppContent() {
       )
       supabase.from('orders').update({ status: prevStatus, last_updated: now }).eq('id', orderId).then()
       if (user && reverted) {
-        logAction(user.name, user.role, "Reverted Order Status", reverted.orderNumber, `Ready to Ship → ${prevStatus} — no outgoing dispatch was submitted`)
+        logAction(user.name, user.role, "Reverted Order Status", reverted.orderNumber, `Dispatched → ${prevStatus} — no outgoing dispatch was submitted`)
         setMessage(`Order ${reverted.orderNumber} reverted to ${prevStatus} — no dispatch record was submitted.`)
         setMessageOpen(true)
       }
@@ -1239,7 +1239,9 @@ function AppContent() {
                   fulfilledTypes.has(item.productType) ? { ...item, fulfilled: true, batchCode: products.find((p) => p.productType === item.productType)?.batchCode } : item
                 )
                 const allFulfilled = updatedItems.length > 0 && updatedItems.every((i) => i.fulfilled)
-                return { ...o, items: updatedItems, status: allFulfilled ? "Dispatched" as const : o.status, lastUpdated: new Date().toISOString() }
+                // A partial dispatch started from the Dispatched status puts the order back at its previous status.
+                const partialStatus = updatedItems.length > 0 && outgoingPrefill?.previousStatus || o.status
+                return { ...o, items: updatedItems, status: allFulfilled ? "Dispatched" as const : partialStatus, lastUpdated: new Date().toISOString() }
               }
               setOrders((prev) => prev.map(updateOrder))
               handleOrdersChange(orders.map(updateOrder))
@@ -1271,10 +1273,10 @@ function AppContent() {
             userName={user.name}
             onAuditLog={(action, target, details) => logAction(user.name, user.role, action, target, details)}
             onMessage={showMessage}
-            onReadyToShipForOutgoing={(order) => {
-              // The order was just moved to "Ready to Ship". If the user navigates away from
-              // Outgoing without submitting a dispatch record we'll revert it back to
-              // "In Progress" (handled by the useEffect below).
+            onDispatchForOutgoing={(order, previousStatus) => {
+              // The order was just moved to "Dispatched". If the user navigates away from
+              // Outgoing without submitting a dispatch record we'll revert it to its
+              // previous status (handled by the auto-revert useEffect).
               setOutgoingPrefill({
                 orderId: order.id,
                 items: (order.items || []).filter((i) => !i.fulfilled),
@@ -1282,7 +1284,7 @@ function AppContent() {
                 customerAddress: order.customerAddress || "",
                 freight: order.freight,
                 freightCarrier: order.freightCarrier,
-                previousStatus: "In Progress",
+                previousStatus,
               })
               setActiveSection("outgoing")
             }}

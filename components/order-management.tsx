@@ -75,10 +75,10 @@ interface OrderManagementProps {
   userName: string
   onAuditLog: (action: string, target: string, details: string) => void
   onMessage: (msg: string) => void
-  onReadyToShipForOutgoing: (order: Order) => void
+  onDispatchForOutgoing: (order: Order, previousStatus: OrderStatus) => void
 }
 
-export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, userName, onAuditLog, onMessage, onReadyToShipForOutgoing }: OrderManagementProps) {
+export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, userName, onAuditLog, onMessage, onDispatchForOutgoing }: OrderManagementProps) {
   const [filter, setFilter] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<string>("open")
   const [priorityOnly, setPriorityOnly] = React.useState(false)
@@ -113,9 +113,10 @@ export function OrderManagement({ orders, onOrdersChange, isAdmin, canManage, us
       o.id === order.id ? updatedOrder : o
     ))
     onAuditLog("Updated Order Status", order.orderNumber, `${order.status} → ${newStatus} for ${order.customer}`)
-    onMessage(`Order ${order.orderNumber} updated to ${newStatus}`)
-    if (newStatus === "Ready to Ship") {
-      onReadyToShipForOutgoing(updatedOrder)
+    if (newStatus === "Dispatched") {
+      onDispatchForOutgoing(updatedOrder, order.status)
+    } else if (newStatus !== "Ready to Ship") {
+      onMessage(`Order ${order.orderNumber} updated to ${newStatus}`)
     }
   }
 
